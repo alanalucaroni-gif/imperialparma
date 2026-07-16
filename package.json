@@ -1,0 +1,17 @@
+{
+  "name": "imperial-erp",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @imperial/api & npm run dev -w @imperial/web",
+    "dev:api": "npm run dev -w @imperial/api",
+    "dev:web": "npm run dev -w @imperial/web",
+    "build": "npm run build -w @imperial/api && npm run build -w @imperial/web",
+    "typecheck": "npm run typecheck -w @imperial/api && npm run typecheck -w @imperial/web",
+    "db:generate": "npm run db:generate -w @imperial/api",
+    "db:migrate": "npm run db:migrate -w @imperial/api",
+    "db:seed": "npm run db:seed -w @imperial/api"
+  },
+  "engines": { "node": ">=22" }
+}

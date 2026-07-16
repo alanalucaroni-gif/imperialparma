@@ -1,0 +1,1692 @@
+import React, { useEffect, useState, useMemo } from "react";
+import { api } from "./api";
+import {
+  LayoutDashboard, Package, FlaskConical, ChefHat, ShoppingCart,
+  Truck, Users, UserCircle2, Wallet, BarChart3, Settings, Plug,
+  Search, Bell, Sun, Moon, ChevronDown, TrendingUp, TrendingDown,
+  AlertTriangle, Clock, ArrowUpRight, ArrowDownRight, Plus, Filter,
+  MoreHorizontal, CheckCircle2, PauseCircle, Loader2, Boxes,
+  FileText, XCircle, CircleDollarSign, PackageCheck, Trophy, Send, Star,
+  Bike, MapPin, Upload, FileCode2, ScanLine
+} from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
+} from "recharts";
+
+// ---------------------------------------------------------------------------
+// Marca — brasão estilizado (coroa + escudo + grinalda), herda currentColor
+// ---------------------------------------------------------------------------
+function BrandCrest({ size = 40, className }) {
+  const arm = [0, 1, 2, 3, 4];
+  return (
+    <svg viewBox="0 0 100 100" width={size} height={size} className={className}>
+      <path d="M35 20 L40 29 L50 16 L60 29 L65 20 L61 33 L39 33 Z" fill="currentColor" />
+      <rect x="37" y="33" width="26" height="3.5" rx="1" fill="currentColor" />
+      <path d="M31 38 H69 V58 C69 73 58 82 50 89 C42 82 31 73 31 58 Z" fill="none" stroke="currentColor" strokeWidth="3" />
+      <line x1="50" y1="38" x2="50" y2="89" stroke="currentColor" strokeWidth="2" />
+      <text x="50" y="67" textAnchor="middle" fontSize="24" fontWeight="700" fill="currentColor" fontFamily="Georgia, serif">P</text>
+      {arm.map(i => (
+        <ellipse key={"l" + i} cx={27 - i * 3.2} cy={48 + i * 7.4} rx="4.2" ry="2.3"
+          fill="currentColor" transform={`rotate(${-18 - i * 9} ${27 - i * 3.2} ${48 + i * 7.4})`} />
+      ))}
+      {arm.map(i => (
+        <ellipse key={"r" + i} cx={73 + i * 3.2} cy={48 + i * 7.4} rx="4.2" ry="2.3"
+          fill="currentColor" transform={`rotate(${18 + i * 9} ${73 + i * 3.2} ${48 + i * 7.4})`} />
+      ))}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mock data — Império das Parmegianas (delivery)
+// ---------------------------------------------------------------------------
+
+const revenueTrend = [
+  { mes: "Jan", receita: 68, custo: 41 },
+  { mes: "Fev", receita: 74, custo: 44 },
+  { mes: "Mar", receita: 79, custo: 47 },
+  { mes: "Abr", receita: 86, custo: 51 },
+  { mes: "Mai", receita: 92, custo: 54 },
+  { mes: "Jun", receita: 101, custo: 58 },
+];
+
+const preparoSemana = [
+  { dia: "Seg", porcoes: 84 }, { dia: "Ter", porcoes: 96 }, { dia: "Qua", porcoes: 78 },
+  { dia: "Qui", porcoes: 112 }, { dia: "Sex", porcoes: 168 }, { dia: "Sáb", porcoes: 204 },
+];
+
+const margemData = [
+  { name: "Custo", value: 51, color: "#94A3B8" },
+  { name: "Margem", value: 49, color: "#7A1420" },
+];
+
+const estoqueBaixo = [
+  { nome: "Farinha de Rosca", qtd: 3, min: 15, un: "kg" },
+  { nome: "Embalagem Marmita 500ml", qtd: 140, min: 600, un: "un" },
+  { nome: "Queijo Muçarela", qtd: 4.2, min: 20, un: "kg" },
+];
+
+const initialMovs = [
+  { tipo: "saida", desc: "Pedido #2214 — Parmegiana de Frango", qtd: "-3 porções", hora: "há 8 min" },
+  { tipo: "entrada", desc: "Compra recebida — Contra-filé Bovino", qtd: "+40 kg", hora: "há 35 min" },
+  { tipo: "producao", desc: "Preparo finalizado — Molho de Tomate Artesanal", qtd: "+18 L", hora: "há 1h" },
+  { tipo: "saida", desc: "Pedido #2213 — Parmegiana Bovina + Fritas", qtd: "-2 porções", hora: "há 1h20" },
+];
+
+const initialEstoque = [
+  { cod: "CN-1001", nome: "Filé de Frango", cat: "Carnes", qtd: 62, min: 30, custo: 18.9, un: "kg", status: "ok" },
+  { cod: "CN-2044", nome: "Contra-filé Bovino", cat: "Carnes", qtd: 18, min: 25, custo: 34.5, un: "kg", status: "baixo" },
+  { cod: "LT-3310", nome: "Queijo Muçarela", cat: "Laticínios", qtd: 4.2, min: 20, custo: 32.0, un: "kg", status: "critico" },
+  { cod: "SC-1187", nome: "Farinha de Rosca", cat: "Secos", qtd: 3, min: 15, custo: 6.8, un: "kg", status: "critico" },
+  { cod: "MH-0552", nome: "Molho de Tomate Artesanal", cat: "Molhos", qtd: 38, min: 15, custo: 5.4, un: "L", status: "ok" },
+  { cod: "EM-0771", nome: "Embalagem Marmita 500ml", cat: "Embalagens", qtd: 140, min: 600, custo: 0.78, un: "un", status: "baixo" },
+];
+
+function statusFor(qtd, min) {
+  if (qtd <= 0) return "critico";
+  if (qtd < min * 0.5) return "critico";
+  if (qtd < min) return "baixo";
+  return "ok";
+}
+
+const ordensPreparo = {
+  aguardando: [
+    { id: "PR-0501", produto: "Parmegiana de Frango Grande", qtd: "40 porções", resp: "Cozinha 1" },
+    { id: "PR-0502", produto: "Parmegiana Bovina", qtd: "25 porções", resp: "Cozinha 1" },
+  ],
+  producao: [
+    { id: "PR-0499", produto: "Molho de Tomate Artesanal", qtd: "20 L", resp: "Dona Ivone", progresso: 70 },
+    { id: "PR-0500", produto: "Parmegiana de Frango", qtd: "60 porções", resp: "Cozinha 2", progresso: 35 },
+  ],
+  concluidas: [
+    { id: "PR-0497", produto: "Parmegiana de Frango", qtd: "80 porções", resp: "Cozinha 2" },
+    { id: "PR-0498", produto: "Arroz e Fritas (guarnição)", qtd: "120 porções", resp: "Cozinha 1" },
+  ],
+};
+
+const pedidosVenda = [
+  { id: "#2214", cliente: "João Pedro Alves — Bairro Centro", valor: "R$ 62,90", pagamento: "Pix", status: "em_preparo", data: "hoje 19:42" },
+  { id: "#2213", cliente: "Marina Costa — Jd. das Flores", valor: "R$ 78,40", pagamento: "Cartão", status: "saiu_entrega", data: "hoje 19:31" },
+  { id: "#2212", cliente: "Distribuidora iFood (repasse)", valor: "R$ 341,20", pagamento: "App", status: "entregue", data: "hoje 18:55" },
+  { id: "#2211", cliente: "Carlos Eduardo — Vila Nova", valor: "R$ 45,00", pagamento: "Dinheiro", status: "cancelado", data: "hoje 18:20" },
+];
+
+const fluxoCaixa = [
+  { dia: "26/06", saldo: 8.2 }, { dia: "27/06", saldo: 9.1 }, { dia: "28/06", saldo: 7.8 },
+  { dia: "29/06", saldo: 10.4 }, { dia: "30/06", saldo: 13.9 }, { dia: "01/07", saldo: 15.2 }, { dia: "02/07", saldo: 14.6 },
+];
+
+const initialContasPagar = [
+  { desc: "Boi Manso Distribuidora — Carnes", venc: "05/07", valor: "R$ 3.240,00", status: "aberto" },
+  { desc: "Aluguel cozinha industrial", venc: "10/07", valor: "R$ 2.800,00", status: "aberto" },
+  { desc: "Botijões de gás GLP", venc: "28/06", valor: "R$ 640,00", status: "atrasado" },
+];
+
+const contasReceber = [
+  { desc: "Repasse iFood — semana 26", venc: "07/07", valor: "R$ 2.180,00", status: "aberto" },
+  { desc: "Repasse Rappi — semana 26", venc: "07/07", valor: "R$ 940,00", status: "aberto" },
+  { desc: "Contrato corporativo — Marmitas Empresa XP", venc: "30/06", valor: "R$ 1.120,00", status: "atrasado" },
+];
+
+const pedidosCompra = [
+  { id: "PC-0231", fornecedor: "Boi Manso Distribuidora", itens: "Contra-filé Bovino, Filé de Frango", valor: "R$ 4.820,00", status: "recebido", data: "28/06" },
+  { id: "PC-0232", fornecedor: "Laticínios Vale Verde", itens: "Queijo Muçarela (60kg)", valor: "R$ 1.920,00", status: "parcial", data: "30/06" },
+  { id: "PC-0233", fornecedor: "Embalagens Sul Delivery", itens: "Marmitas 500ml (10.000 un)", valor: "R$ 7.800,00", status: "pendente", data: "01/07" },
+  { id: "PC-0234", fornecedor: "Boi Manso Distribuidora", itens: "Farinha de Rosca (100kg)", valor: "R$ 680,00", status: "cancelado", data: "01/07" },
+];
+
+const cotacoes = [
+  {
+    id: "COT-0088",
+    item: "Contra-filé Bovino (100kg)",
+    aberta: "28/06",
+    status: "respondida",
+    fornecedores: [
+      { nome: "Boi Manso Distribuidora", preco: 34.5, prazo: 2, frete: 80, condicoes: "30 dias" },
+      { nome: "Frigorífico Central", preco: 32.9, prazo: 4, frete: 40, condicoes: "à vista" },
+      { nome: "Carnes Premium Ltda", preco: 35.8, prazo: 1, frete: 0, condicoes: "28 dias" },
+    ],
+  },
+  {
+    id: "COT-0089",
+    item: "Embalagem Marmita 500ml (20.000 un)",
+    aberta: "30/06",
+    status: "respondida",
+    fornecedores: [
+      { nome: "Embalagens Sul Delivery", preco: 0.78, prazo: 5, frete: 220, condicoes: "30/60 dias" },
+      { nome: "PackFood Embalagens", preco: 0.71, prazo: 7, frete: 150, condicoes: "30 dias" },
+    ],
+  },
+  {
+    id: "COT-0090",
+    item: "Queijo Muçarela (150kg/mês)",
+    aberta: "01/07",
+    status: "aguardando",
+    fornecedores: [
+      { nome: "Laticínios Vale Verde", preco: null, prazo: null, frete: null, condicoes: null },
+      { nome: "Laticínios Serra Azul", preco: null, prazo: null, frete: null, condicoes: null },
+      { nome: "Queijaria Bom Sabor", preco: null, prazo: null, frete: null, condicoes: null },
+    ],
+  },
+];
+
+function scoreFornecedor(f) {
+  if (f.preco == null) return Infinity;
+  return f.preco + f.frete / 100;
+}
+
+function normalizeTxt(s) {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+function guessInsumoCod(xProd, estoqueItens) {
+  const x = normalizeTxt(xProd);
+  const match = estoqueItens.find(i => {
+    const n = normalizeTxt(i.nome);
+    return x.includes(n) || n.includes(x);
+  });
+  return match?.cod ?? "";
+}
+
+function parseNFeXML(xmlText) {
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, "application/xml");
+  if (xml.getElementsByTagName("parsererror").length) {
+    throw new Error("XML inválido ou mal formatado.");
+  }
+  const getTag = (parent, tag) => parent?.getElementsByTagName(tag)?.[0]?.textContent ?? "";
+
+  const emit = xml.getElementsByTagName("emit")[0];
+  const fornecedor = emit ? getTag(emit, "xNome") : "";
+  const cnpj = emit ? getTag(emit, "CNPJ") : "";
+
+  const detEls = Array.from(xml.getElementsByTagName("det"));
+  if (detEls.length === 0) throw new Error("Nenhum item (tag <det>) encontrado no XML.");
+
+  const itens = detEls.map(det => {
+    const prod = det.getElementsByTagName("prod")[0];
+    return {
+      cProd: getTag(prod, "cProd"),
+      xProd: getTag(prod, "xProd"),
+      qCom: parseFloat(getTag(prod, "qCom").replace(",", ".")) || 0,
+      uCom: getTag(prod, "uCom"),
+      vUnCom: parseFloat(getTag(prod, "vUnCom").replace(",", ".")) || 0,
+    };
+  });
+
+  const total = xml.getElementsByTagName("ICMSTot")[0];
+  const vNF = total ? parseFloat(getTag(total, "vNF").replace(",", ".")) || 0 : 0;
+
+  const duplicatas = Array.from(xml.getElementsByTagName("dup")).map(d => ({
+    nDup: getTag(d, "nDup"),
+    dVenc: getTag(d, "dVenc"),
+    vDup: parseFloat(getTag(d, "vDup").replace(",", ".")) || 0,
+  }));
+
+  const infNFe = xml.getElementsByTagName("infNFe")[0];
+  const chaveRaw = infNFe?.getAttribute("Id") || "";
+  const chave = chaveRaw.replace(/^NFe/, "");
+
+  return { fornecedor, cnpj, itens, vNF, duplicatas, chave };
+}
+
+const cadeiaValor = [
+  { label: "Compras", value: "R$ 15,3k", icon: Truck, sub: "4 pedidos abertos" },
+  { label: "Estoque", value: "R$ 22,8k", icon: Boxes, sub: "48 insumos ativos" },
+  { label: "Cozinha", value: "4 preparos", icon: ChefHat, sub: "2 em andamento" },
+  { label: "Vendas", value: "R$ 101,4k", icon: Bike, sub: "este mês" },
+  { label: "Financeiro", value: "R$ 3,1k", icon: Wallet, sub: "a receber (7d)" },
+];
+
+// ---------------------------------------------------------------------------
+
+const NAV = [
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "estoque", label: "Estoque", icon: Package },
+  { key: "receitas", label: "Receitas", icon: FlaskConical },
+  { key: "producao", label: "Cozinha / Preparo", icon: ChefHat },
+  { key: "compras", label: "Compras", icon: Truck },
+  { key: "vendas", label: "Pedidos / Vendas", icon: ShoppingCart },
+  { key: "clientes", label: "Clientes", icon: Users },
+  { key: "financeiro", label: "Financeiro", icon: Wallet },
+  { key: "relatorios", label: "Relatórios", icon: BarChart3 },
+  { key: "usuarios", label: "Usuários", icon: UserCircle2 },
+  { key: "integracoes", label: "Integrações", icon: Plug },
+  { key: "config", label: "Configurações", icon: Settings },
+];
+
+const READY = ["dashboard", "estoque", "producao", "vendas", "compras", "financeiro"];
+
+function cx(...a) { return a.filter(Boolean).join(" "); }
+
+function Badge({ tone = "slate", children }) {
+  const tones = {
+    slate: "bg-slate-100 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300",
+    green: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+    amber: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
+    red: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400",
+    brand: "bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300",
+  };
+  return <span className={cx("px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap", tones[tone])}>{children}</span>;
+}
+
+function Card({ className, children }) {
+  return (
+    <div className={cx(
+      "rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+      "dark:border-slate-700/60 dark:bg-slate-800/60",
+      className
+    )}>
+      {children}
+    </div>
+  );
+}
+
+function KPI({ label, value, delta, positive, icon: Icon }) {
+  return (
+    <Card className="p-5 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
+        <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+          <Icon size={16} className="text-[#7A1420] dark:text-red-400" />
+        </div>
+      </div>
+      <div className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">{value}</div>
+      <div className={cx("flex items-center gap-1 text-xs font-medium", positive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+        {positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+        {delta}
+      </div>
+    </Card>
+  );
+}
+
+function ValueChain() {
+  return (
+    <Card className="p-5 md:p-6 overflow-x-auto">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Cadeia de valor em tempo real</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Rastreabilidade entre compras, estoque, cozinha, vendas e financeiro</p>
+        </div>
+        <Badge tone="brand">
+          <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#7A1420] animate-pulse" /> ao vivo</span>
+        </Badge>
+      </div>
+      <div className="flex items-center min-w-[720px]">
+        {cadeiaValor.map((node, i) => (
+          <React.Fragment key={node.label}>
+            <div className="flex flex-col items-center gap-2 flex-1">
+              <div className="relative w-12 h-12 rounded-xl bg-[#4A0A10] dark:bg-[#7A1420] flex items-center justify-center">
+                <node.icon size={20} className="text-white" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white dark:border-slate-800" />
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">{node.value}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">{node.label}</div>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">{node.sub}</div>
+              </div>
+            </div>
+            {i < cadeiaValor.length - 1 && (
+              <div className="flex-1 h-px relative -mt-9 mx-1">
+                <div className="absolute inset-0 border-t-2 border-dashed border-slate-200 dark:border-slate-600" />
+                <div className="absolute inset-0 border-t-2 border-[#7A1420] origin-left animate-[flow_2.4s_linear_infinite]" style={{ width: "40%" }} />
+              </div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+      <style>{`@keyframes flow { 0% { width: 0%; opacity: 0.9 } 90% { opacity: 0.9 } 100% { width: 100%; opacity: 0 } }`}</style>
+    </Card>
+  );
+}
+
+function Dashboard({ movs }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <ValueChain />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPI label="Valor em estoque" value="R$ 22.840" delta="+3,1% vs mês anterior" positive icon={Boxes} />
+        <KPI label="Faturamento (mês)" value="R$ 101.400" delta="+9,4% vs mês anterior" positive icon={TrendingUp} />
+        <KPI label="Margem média" value="49,1%" delta="+1,8 p.p. vs mês anterior" positive icon={BarChart3} />
+        <KPI label="Preparado hoje" value="204 porções" delta="Sexta e sábado em alta" positive icon={ChefHat} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Receita x Custo</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Últimos 6 meses, em milhares (R$)</p>
+            </div>
+            <Badge tone="slate">2026</Badge>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={revenueTrend} margin={{ left: -20, right: 10 }}>
+              <defs>
+                <linearGradient id="rec" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#7A1420" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#7A1420" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="mes" tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} />
+              <Area type="monotone" dataKey="custo" stroke="#94A3B8" fill="transparent" strokeWidth={2} strokeDasharray="4 3" />
+              <Area type="monotone" dataKey="receita" stroke="#7A1420" fill="url(#rec)" strokeWidth={2.5} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Card>
+
+        <Card className="p-5">
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm mb-1">Margem consolidada</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Custo vs. margem líquida</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={margemData} dataKey="value" innerRadius={52} outerRadius={72} paddingAngle={3}>
+                {margemData.map((d, i) => <Cell key={i} fill={d.color} stroke="none" />)}
+              </Pie>
+              <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="flex justify-center gap-4 mt-1">
+            {margemData.map(d => (
+              <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <span className="w-2 h-2 rounded-full" style={{ background: d.color }} /> {d.name} {d.value}%
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Últimas movimentações</h3>
+            <button className="text-xs text-[#7A1420] dark:text-red-400 font-medium hover:underline">Ver todas</button>
+          </div>
+          <div className="flex flex-col divide-y divide-slate-100 dark:divide-slate-700/60">
+            {movs.slice(0, 4).map((m, i) => (
+              <div key={i} className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3">
+                  <div className={cx("w-8 h-8 rounded-lg flex items-center justify-center",
+                    m.tipo === "entrada" ? "bg-emerald-50 dark:bg-emerald-500/10" :
+                    m.tipo === "saida" ? "bg-rose-50 dark:bg-rose-500/10" : "bg-red-50 dark:bg-red-500/10")}>
+                    {m.tipo === "entrada" ? <ArrowDownRight size={14} className="text-emerald-600 dark:text-emerald-400" /> :
+                     m.tipo === "saida" ? <ArrowUpRight size={14} className="text-rose-600 dark:text-rose-400" /> :
+                     <ChefHat size={14} className="text-[#7A1420] dark:text-red-400" />}
+                  </div>
+                  <div>
+                    <div className="text-sm text-slate-800 dark:text-slate-200">{m.desc}</div>
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1"><Clock size={10} /> {m.hora}</div>
+                  </div>
+                </div>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{m.qtd}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle size={16} className="text-amber-500" />
+            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Estoque baixo</h3>
+          </div>
+          <div className="flex flex-col gap-3">
+            {estoqueBaixo.map((e, i) => (
+              <div key={i}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-slate-700 dark:text-slate-300">{e.nome}</span>
+                  <span className="text-slate-400 text-xs">{e.qtd}/{e.min} {e.un}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                  <div className="h-full bg-amber-400 rounded-full" style={{ width: `${Math.min(100, (e.qtd / e.min) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Estoque({ itens }) {
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() =>
+    itens.filter(p => p.nome.toLowerCase().includes(q.toLowerCase()) || p.cod.toLowerCase().includes(q.toLowerCase())),
+  [q, itens]);
+
+  const statusTone = { ok: "green", atencao: "amber", baixo: "amber", critico: "red" };
+  const statusLabel = { ok: "Normal", atencao: "Atenção", baixo: "Baixo", critico: "Crítico" };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Estoque</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">48 insumos ativos · R$ 22.840,00 em valor total</p>
+        </div>
+        <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+          <Plus size={15} /> Novo insumo
+        </button>
+      </div>
+
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="flex items-center gap-2 flex-1 bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2">
+            <Search size={15} className="text-slate-400" />
+            <input
+              value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Buscar por nome ou código..."
+              className="bg-transparent outline-none text-sm w-full text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
+            />
+          </div>
+          <button className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-sm px-3.5 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40">
+            <Filter size={14} /> Filtros
+          </button>
+        </div>
+
+        <div className="overflow-x-auto -mx-4">
+          <table className="w-full text-sm min-w-[680px]">
+            <thead>
+              <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+                <th className="py-2.5 px-4 font-medium">Código</th>
+                <th className="py-2.5 px-4 font-medium">Insumo</th>
+                <th className="py-2.5 px-4 font-medium">Categoria</th>
+                <th className="py-2.5 px-4 font-medium text-right">Qtd.</th>
+                <th className="py-2.5 px-4 font-medium">Un.</th>
+                <th className="py-2.5 px-4 font-medium text-right">Custo</th>
+                <th className="py-2.5 px-4 font-medium">Status</th>
+                <th className="py-2.5 px-4 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(p => (
+                <tr key={p.cod} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/20">
+                  <td className="py-3 px-4 text-slate-400 font-mono text-xs">{p.cod}</td>
+                  <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{p.nome}</td>
+                  <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{p.cat}</td>
+                  <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{p.qtd.toLocaleString("pt-BR")}</td>
+                  <td className="py-3 px-4 text-slate-400">{p.un}</td>
+                  <td className="py-3 px-4 text-right text-slate-500 dark:text-slate-400">R$ {p.custo.toFixed(2)}</td>
+                  <td className="py-3 px-4"><Badge tone={statusTone[p.status]}>{statusLabel[p.status]}</Badge></td>
+                  <td className="py-3 px-4 text-right"><MoreHorizontal size={16} className="text-slate-400 cursor-pointer" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between mt-4 text-xs text-slate-400">
+          <span>Mostrando {filtered.length} de {itens.length} insumos</span>
+          <div className="flex gap-1">
+            {[1, 2, 3].map(n => (
+              <button key={n} className={cx("w-7 h-7 rounded-lg", n === 1 ? "bg-[#7A1420] text-white" : "hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500")}>{n}</button>
+            ))}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function OPCard({ op, kind }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-mono text-slate-400">{op.id}</span>
+        {kind === "producao" && <Loader2 size={13} className="text-[#7A1420] animate-spin" />}
+        {kind === "concluidas" && <CheckCircle2 size={14} className="text-emerald-500" />}
+        {kind === "aguardando" && <PauseCircle size={14} className="text-slate-400" />}
+      </div>
+      <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{op.produto}</div>
+      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{op.qtd} · {op.resp}</div>
+      {op.progresso !== undefined && (
+        <div className="mt-3">
+          <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+            <div className="h-full bg-[#7A1420] rounded-full" style={{ width: `${op.progresso}%` }} />
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">{op.progresso}% concluído</div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Producao() {
+  const cols = [
+    { key: "aguardando", label: "Aguardando", data: ordensPreparo.aguardando },
+    { key: "producao", label: "Em preparo", data: ordensPreparo.producao },
+    { key: "concluidas", label: "Concluídos hoje", data: ordensPreparo.concluidas },
+  ];
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Cozinha / Preparo</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">4 ordens de preparo · 204 porções finalizadas hoje</p>
+        </div>
+        <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+          <Plus size={15} /> Nova ordem de preparo
+        </button>
+      </div>
+
+      <Card className="p-5">
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={preparoSemana}>
+            <XAxis dataKey="dia" tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+            <YAxis hide />
+            <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} />
+            <Bar dataKey="porcoes" fill="#7A1420" radius={[6, 6, 0, 0]} barSize={28} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {cols.map(col => (
+          <div key={col.key} className="flex flex-col gap-3">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{col.label}</h3>
+              <Badge tone="slate">{col.data.length}</Badge>
+            </div>
+            {col.data.map(op => <OPCard key={op.id} op={op} kind={col.key} />)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Vendas() {
+  const statusTone = { entregue: "green", em_preparo: "amber", saiu_entrega: "brand", cancelado: "red" };
+  const statusLabel = { entregue: "Entregue", em_preparo: "Em preparo", saiu_entrega: "Saiu p/ entrega", cancelado: "Cancelado" };
+  const statusIcon = { entregue: CheckCircle2, em_preparo: ChefHat, saiu_entrega: Bike, cancelado: XCircle };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Pedidos / Vendas</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">R$ 101.400,00 faturados este mês</p>
+        </div>
+        <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+          <Plus size={15} /> Novo pedido
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPI label="Pedidos (mês)" value="1.842" delta="+120 vs mês anterior" positive icon={ShoppingCart} />
+        <KPI label="Ticket médio" value="R$ 55,10" delta="+2,1%" positive icon={TrendingUp} />
+        <KPI label="Tempo médio de entrega" value="34 min" delta="-4 min vs média" positive icon={Bike} />
+        <KPI label="Cancelamentos" value="1,8%" delta="-0,3 p.p." positive icon={TrendingDown} />
+      </div>
+
+      <Card className="p-4">
+        <div className="overflow-x-auto -mx-4">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead>
+              <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+                <th className="py-2.5 px-4 font-medium">Pedido</th>
+                <th className="py-2.5 px-4 font-medium">Cliente / Endereço</th>
+                <th className="py-2.5 px-4 font-medium text-right">Valor</th>
+                <th className="py-2.5 px-4 font-medium">Pagamento</th>
+                <th className="py-2.5 px-4 font-medium">Status</th>
+                <th className="py-2.5 px-4 font-medium">Hora</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pedidosVenda.map(v => {
+                const Icon = statusIcon[v.status];
+                return (
+                  <tr key={v.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/20">
+                    <td className="py-3 px-4 font-mono text-xs text-slate-400">{v.id}</td>
+                    <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">
+                      <span className="inline-flex items-center gap-1.5"><MapPin size={12} className="text-slate-400" />{v.cliente}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{v.valor}</td>
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{v.pagamento}</td>
+                    <td className="py-3 px-4">
+                      <Badge tone={statusTone[v.status]}><span className="inline-flex items-center gap-1"><Icon size={11} /> {statusLabel[v.status]}</span></Badge>
+                    </td>
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{v.data}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Financeiro({ contasPagar }) {
+  const [tab, setTab] = useState("pagar");
+  const rows = tab === "pagar" ? contasPagar : contasReceber;
+  const statusTone = { aberto: "brand", atrasado: "red", pago: "green" };
+  const statusLabel = { aberto: "Em aberto", atrasado: "Atrasado", pago: "Pago" };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Financeiro</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Saldo atual em caixa: R$ 14.600,00</p>
+        </div>
+        <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+          <Plus size={15} /> Novo lançamento
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPI label="A receber (7d)" value="R$ 3.100" delta="3 títulos em aberto" positive icon={ArrowDownRight} />
+        <KPI label="A pagar (7d)" value="R$ 6.680" delta="3 títulos em aberto" positive={false} icon={ArrowUpRight} />
+        <KPI label="Saldo projetado" value="R$ 11.020" delta="+5,4% vs semana anterior" positive icon={CircleDollarSign} />
+        <KPI label="DRE — Lucro líquido" value="R$ 41.200" delta="Margem de 40,6%" positive icon={Wallet} />
+      </div>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Fluxo de caixa</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Saldo diário, em milhares (R$) — últimos 7 dias</p>
+          </div>
+          <Badge tone="slate">7 dias</Badge>
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={fluxoCaixa} margin={{ left: -20, right: 10 }}>
+            <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} />
+            <Line type="monotone" dataKey="saldo" stroke="#7A1420" strokeWidth={2.5} dot={{ r: 3, fill: "#7A1420" }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center gap-1 mb-4 bg-slate-50 dark:bg-slate-700/40 rounded-xl p-1 w-fit">
+          <button onClick={() => setTab("pagar")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors", tab === "pagar" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Contas a pagar</button>
+          <button onClick={() => setTab("receber")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors", tab === "receber" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Contas a receber</button>
+        </div>
+        <div className="overflow-x-auto -mx-4">
+          <table className="w-full text-sm min-w-[560px]">
+            <thead>
+              <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+                <th className="py-2.5 px-4 font-medium">Descrição</th>
+                <th className="py-2.5 px-4 font-medium">Vencimento</th>
+                <th className="py-2.5 px-4 font-medium text-right">Valor</th>
+                <th className="py-2.5 px-4 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/20">
+                  <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{r.desc}</td>
+                  <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{r.venc}</td>
+                  <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{r.valor}</td>
+                  <td className="py-3 px-4"><Badge tone={statusTone[r.status]}>{statusLabel[r.status]}</Badge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function CotacaoCard({ cot }) {
+  const respondida = cot.status === "respondida";
+  const melhorIdx = useMemo(() => {
+    if (!respondida) return -1;
+    let best = 0;
+    cot.fornecedores.forEach((f, i) => {
+      if (scoreFornecedor(f) < scoreFornecedor(cot.fornecedores[best])) best = i;
+    });
+    return best;
+  }, [cot, respondida]);
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between mb-4 gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-slate-400">{cot.id}</span>
+            <Badge tone={respondida ? "green" : "amber"}>
+              {respondida ? "Respondida" : "Aguardando respostas"}
+            </Badge>
+          </div>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm mt-1">{cot.item}</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Solicitação aberta em {cot.aberta} · {cot.fornecedores.length} fornecedores consultados</p>
+        </div>
+        {!respondida && (
+          <button className="flex items-center gap-1.5 text-xs font-medium text-[#7A1420] dark:text-red-400 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 whitespace-nowrap">
+            <Send size={12} /> Reenviar solicitação
+          </button>
+        )}
+      </div>
+
+      <div className="overflow-x-auto -mx-5">
+        <table className="w-full text-sm min-w-[600px]">
+          <thead>
+            <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+              <th className="py-2 px-5 font-medium">Fornecedor</th>
+              <th className="py-2 px-5 font-medium text-right">Preço/un.</th>
+              <th className="py-2 px-5 font-medium text-right">Prazo</th>
+              <th className="py-2 px-5 font-medium text-right">Frete</th>
+              <th className="py-2 px-5 font-medium">Condições</th>
+              <th className="py-2 px-5 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {cot.fornecedores.map((f, i) => (
+              <tr key={f.nome} className={cx(
+                "border-b border-slate-50 dark:border-slate-700/50",
+                i === melhorIdx && "bg-emerald-50/60 dark:bg-emerald-500/5"
+              )}>
+                <td className="py-3 px-5 text-slate-800 dark:text-slate-200 font-medium">{f.nome}</td>
+                <td className="py-3 px-5 text-right text-slate-700 dark:text-slate-300">{f.preco != null ? `R$ ${f.preco.toFixed(2)}` : "—"}</td>
+                <td className="py-3 px-5 text-right text-slate-500 dark:text-slate-400">{f.prazo != null ? `${f.prazo} dias` : "—"}</td>
+                <td className="py-3 px-5 text-right text-slate-500 dark:text-slate-400">{f.frete != null ? (f.frete === 0 ? "Grátis" : `R$ ${f.frete.toFixed(2)}`) : "—"}</td>
+                <td className="py-3 px-5 text-slate-500 dark:text-slate-400">{f.condicoes ?? "—"}</td>
+                <td className="py-3 px-5 text-right">
+                  {i === melhorIdx && (
+                    <Badge tone="green"><span className="inline-flex items-center gap-1"><Trophy size={11} /> Melhor proposta</span></Badge>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {respondida && (
+        <div className="flex justify-end mt-4">
+          <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-xs font-medium px-3.5 py-2 rounded-xl transition-colors">
+            <CheckCircle2 size={13} /> Gerar pedido de compra com {cot.fornecedores[melhorIdx].nome}
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Cotacoes() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Solicitações de cotação</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">A melhor proposta é destacada automaticamente por preço, frete e prazo</p>
+        </div>
+        <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+          <Plus size={15} /> Nova cotação
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center"><Clock size={16} className="text-amber-500" /></div>
+          <div><div className="text-lg font-semibold text-slate-900 dark:text-white">1</div><div className="text-xs text-slate-500 dark:text-slate-400">Aguardando resposta</div></div>
+        </Card>
+        <Card className="p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center"><CheckCircle2 size={16} className="text-emerald-500" /></div>
+          <div><div className="text-lg font-semibold text-slate-900 dark:text-white">2</div><div className="text-xs text-slate-500 dark:text-slate-400">Respondidas</div></div>
+        </Card>
+        <Card className="p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-red-50 dark:bg-red-500/10 flex items-center justify-center"><Star size={16} className="text-[#7A1420]" /></div>
+          <div><div className="text-lg font-semibold text-slate-900 dark:text-white">R$ 0,07</div><div className="text-xs text-slate-500 dark:text-slate-400">Economia média por un.</div></div>
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {cotacoes.map(c => <CotacaoCard key={c.id} cot={c} />)}
+      </div>
+    </div>
+  );
+}
+
+function CompraManual({ estoqueItens, onRegistrar, historico }) {
+  const [insumoCod, setInsumoCod] = useState(estoqueItens[0]?.cod ?? "");
+  const [quantidade, setQuantidade] = useState("");
+  const [custo, setCusto] = useState("");
+  const [fornecedor, setFornecedor] = useState("");
+  const [pagamento, setPagamento] = useState("Dinheiro");
+  const [obs, setObs] = useState("");
+  const [feedback, setFeedback] = useState(null);
+
+  const insumo = estoqueItens.find(i => i.cod === insumoCod);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const qtdNum = parseFloat(quantidade);
+    if (!insumo || !qtdNum || qtdNum <= 0) return;
+    const custoNum = custo ? parseFloat(custo) : insumo.custo;
+    onRegistrar({
+      insumoCod: insumo.cod,
+      insumoNome: insumo.nome,
+      un: insumo.un,
+      quantidade: qtdNum,
+      custo: custoNum,
+      fornecedor: fornecedor || "Fornecedor avulso (sem cadastro)",
+      pagamento,
+      obs,
+    });
+    setFeedback({ nome: insumo.nome, qtd: qtdNum, un: insumo.un });
+    setQuantidade(""); setCusto(""); setFornecedor(""); setObs("");
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Compra manual (sem nota fiscal)</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Para compras feitas direto no balcão, sem pedido formal — a entrada cai direto no estoque e no histórico de movimentações</p>
+      </div>
+
+      {feedback && (
+        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm px-4 py-2.5 rounded-xl">
+          <CheckCircle2 size={15} />
+          Estoque atualizado: +{feedback.qtd} {feedback.un} de {feedback.nome}
+        </div>
+      )}
+
+      <Card className="p-5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Insumo</label>
+            <select value={insumoCod} onChange={e => setInsumoCod(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200">
+              {estoqueItens.map(i => <option key={i.cod} value={i.cod}>{i.nome} ({i.cod})</option>)}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Quantidade {insumo ? `(${insumo.un})` : ""}</label>
+            <input type="number" step="0.01" min="0" required value={quantidade} onChange={e => setQuantidade(e.target.value)}
+              placeholder="Ex: 10"
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Custo unitário (R$)</label>
+            <input type="number" step="0.01" min="0" value={custo} onChange={e => setCusto(e.target.value)}
+              placeholder={insumo ? `Padrão: R$ ${insumo.custo.toFixed(2)}` : ""}
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Fornecedor / origem</label>
+            <input type="text" value={fornecedor} onChange={e => setFornecedor(e.target.value)}
+              placeholder="Ex: Açougue do bairro"
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Forma de pagamento</label>
+            <select value={pagamento} onChange={e => setPagamento(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200">
+              <option>Dinheiro</option>
+              <option>Pix</option>
+              <option>Cartão</option>
+              <option>Outro</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Observação (opcional)</label>
+            <textarea value={obs} onChange={e => setObs(e.target.value)} rows={2}
+              placeholder="Ex: comprado direto com o produtor, sem nota"
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400 resize-none" />
+          </div>
+
+          <div className="sm:col-span-2 flex items-center justify-between gap-3 mt-1">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1.5"><AlertTriangle size={12} className="text-amber-500" /> Lançada como entrada sem nota fiscal vinculada</span>
+            <button type="submit" className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors whitespace-nowrap">
+              <Plus size={15} /> Registrar entrada no estoque
+            </button>
+          </div>
+        </form>
+      </Card>
+
+      <Card className="p-4">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 px-1">Histórico de compras manuais</h4>
+        {historico.length === 0 ? (
+          <p className="text-sm text-slate-400 px-1 py-4 text-center">Nenhuma compra manual registrada ainda.</p>
+        ) : (
+          <div className="overflow-x-auto -mx-4">
+            <table className="w-full text-sm min-w-[640px]">
+              <thead>
+                <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+                  <th className="py-2.5 px-4 font-medium">Insumo</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Qtd.</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Valor total</th>
+                  <th className="py-2.5 px-4 font-medium">Fornecedor</th>
+                  <th className="py-2.5 px-4 font-medium">Pagamento</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historico.map((h, i) => (
+                  <tr key={i} className="border-b border-slate-50 dark:border-slate-700/50">
+                    <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{h.insumoNome}</td>
+                    <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{h.quantidade} {h.un}</td>
+                    <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">R$ {(h.quantidade * h.custo).toFixed(2)}</td>
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{h.fornecedor}</td>
+                    <td className="py-3 px-4"><Badge tone="brand">{h.pagamento}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function EntradaBoleto({ estoqueItens, onRegistrar, historico }) {
+  const [insumoCod, setInsumoCod] = useState(estoqueItens[0]?.cod ?? "");
+  const [quantidade, setQuantidade] = useState("");
+  const [fornecedor, setFornecedor] = useState("");
+  const [linhaDigitavel, setLinhaDigitavel] = useState("");
+  const [valor, setValor] = useState("");
+  const [vencimento, setVencimento] = useState("");
+  const [feedback, setFeedback] = useState(null);
+
+  const insumo = estoqueItens.find(i => i.cod === insumoCod);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const qtdNum = parseFloat(quantidade);
+    const valorNum = parseFloat(valor);
+    if (!insumo || !qtdNum || qtdNum <= 0 || !valorNum || !fornecedor || !vencimento) return;
+    onRegistrar({
+      insumoCod: insumo.cod,
+      insumoNome: insumo.nome,
+      un: insumo.un,
+      quantidade: qtdNum,
+      valor: valorNum,
+      fornecedor,
+      linhaDigitavel,
+      vencimento,
+    });
+    setFeedback({ nome: insumo.nome, qtd: qtdNum, un: insumo.un, valor: valorNum, venc: vencimento });
+    setQuantidade(""); setValor(""); setFornecedor(""); setLinhaDigitavel(""); setVencimento("");
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Entrada por boleto</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Compra recebida com boleto (sem XML de NF-e) — dá entrada no estoque e já gera a conta a pagar no Financeiro</p>
+      </div>
+
+      {feedback && (
+        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm px-4 py-2.5 rounded-xl">
+          <CheckCircle2 size={15} />
+          Estoque atualizado (+{feedback.qtd} {feedback.un} de {feedback.nome}) e conta a pagar de R$ {feedback.valor.toFixed(2)} criada para {feedback.venc}
+        </div>
+      )}
+
+      <Card className="p-5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Insumo</label>
+            <select value={insumoCod} onChange={e => setInsumoCod(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200">
+              {estoqueItens.map(i => <option key={i.cod} value={i.cod}>{i.nome} ({i.cod})</option>)}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Quantidade recebida {insumo ? `(${insumo.un})` : ""}</label>
+            <input type="number" step="0.01" min="0" required value={quantidade} onChange={e => setQuantidade(e.target.value)}
+              placeholder="Ex: 50"
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Fornecedor</label>
+            <input type="text" required value={fornecedor} onChange={e => setFornecedor(e.target.value)}
+              placeholder="Ex: Boi Manso Distribuidora"
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" />
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Linha digitável do boleto (opcional)</label>
+            <input type="text" value={linhaDigitavel} onChange={e => setLinhaDigitavel(e.target.value)}
+              placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm font-mono outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Valor do boleto (R$)</label>
+            <input type="number" step="0.01" min="0" required value={valor} onChange={e => setValor(e.target.value)}
+              placeholder="Ex: 1920.00"
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Vencimento</label>
+            <input type="date" required value={vencimento} onChange={e => setVencimento(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-200" />
+          </div>
+
+          <div className="sm:col-span-2 flex items-center justify-between gap-3 mt-1">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1.5"><FileText size={12} className="text-[#7A1420]" /> Gera entrada de estoque + lançamento em Contas a Pagar</span>
+            <button type="submit" className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors whitespace-nowrap">
+              <Plus size={15} /> Registrar entrada por boleto
+            </button>
+          </div>
+        </form>
+      </Card>
+
+      <Card className="p-4">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 px-1">Histórico de entradas por boleto</h4>
+        {historico.length === 0 ? (
+          <p className="text-sm text-slate-400 px-1 py-4 text-center">Nenhuma entrada por boleto registrada ainda.</p>
+        ) : (
+          <div className="overflow-x-auto -mx-4">
+            <table className="w-full text-sm min-w-[640px]">
+              <thead>
+                <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+                  <th className="py-2.5 px-4 font-medium">Insumo</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Qtd.</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Valor</th>
+                  <th className="py-2.5 px-4 font-medium">Fornecedor</th>
+                  <th className="py-2.5 px-4 font-medium">Vencimento</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historico.map((h, i) => (
+                  <tr key={i} className="border-b border-slate-50 dark:border-slate-700/50">
+                    <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{h.insumoNome}</td>
+                    <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{h.quantidade} {h.un}</td>
+                    <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">R$ {h.valor.toFixed(2)}</td>
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{h.fornecedor}</td>
+                    <td className="py-3 px-4"><Badge tone="brand">{new Date(h.vencimento + "T00:00:00").toLocaleDateString("pt-BR")}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function EntradaXML({ estoqueItens, onRegistrar, historico }) {
+  const [rawXml, setRawXml] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const [mapeamento, setMapeamento] = useState([]); // [{ incluir, cod }]
+  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const fileInputRef = React.useRef(null);
+
+  function processar(texto) {
+    setError("");
+    setFeedback(null);
+    try {
+      const data = parseNFeXML(texto);
+      setParsed(data);
+      setMapeamento(data.itens.map(it => {
+        const cod = guessInsumoCod(it.xProd, estoqueItens);
+        return { incluir: !!cod, cod };
+      }));
+    } catch (err) {
+      setParsed(null);
+      setError(err.message || "Não foi possível ler este XML.");
+    }
+  }
+
+  function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => { setRawXml(ev.target.result); processar(ev.target.result); };
+    reader.readAsText(file);
+  }
+
+  function updateMap(idx, patch) {
+    setMapeamento(prev => prev.map((m, i) => i === idx ? { ...m, ...patch } : m));
+  }
+
+  function handleConfirm() {
+    const itensParaEntrada = parsed.itens
+      .map((it, i) => ({ ...it, ...mapeamento[i] }))
+      .filter(it => it.incluir && it.cod);
+    if (itensParaEntrada.length === 0) return;
+    onRegistrar({
+      chave: parsed.chave,
+      fornecedor: parsed.fornecedor,
+      cnpj: parsed.cnpj,
+      vNF: parsed.vNF,
+      duplicatas: parsed.duplicatas,
+      itens: itensParaEntrada,
+    });
+    setFeedback({ qtdItens: itensParaEntrada.length, fornecedor: parsed.fornecedor, vNF: parsed.vNF });
+    setParsed(null); setRawXml(""); setMapeamento([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Entrada por XML (NF-e)</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Importe o XML da nota — fornecedor, itens, quantidades e parcelas do boleto são lidos automaticamente, sem digitar nada</p>
+      </div>
+
+      {feedback && (
+        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm px-4 py-2.5 rounded-xl">
+          <CheckCircle2 size={15} />
+          {feedback.qtdItens} item(ns) de {feedback.fornecedor} lançados no estoque · nota de R$ {feedback.vNF.toFixed(2)}
+        </div>
+      )}
+
+      {!parsed && (
+        <Card className="p-6 flex flex-col items-center justify-center gap-3 border-dashed">
+          <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+            <FileCode2 size={22} className="text-[#7A1420] dark:text-red-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-slate-700 dark:text-slate-300 font-medium">Selecione o arquivo XML da NF-e</p>
+            <p className="text-xs text-slate-400 mt-0.5">Formato padrão da SEFAZ, com tags &lt;det&gt;, &lt;emit&gt; e &lt;dup&gt;</p>
+          </div>
+          <label className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors cursor-pointer">
+            <Upload size={15} /> Escolher arquivo .xml
+            <input ref={fileInputRef} type="file" accept=".xml,text/xml" onChange={handleFile} className="hidden" />
+          </label>
+
+          <details className="w-full mt-2">
+            <summary className="text-xs text-slate-400 cursor-pointer text-center hover:text-slate-500">ou cole o conteúdo do XML aqui</summary>
+            <textarea
+              value={rawXml}
+              onChange={e => setRawXml(e.target.value)}
+              rows={5}
+              placeholder="<nfeProc>...</nfeProc>"
+              className="w-full mt-2 bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 text-xs font-mono outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400 resize-none"
+            />
+            <button
+              onClick={() => processar(rawXml)}
+              disabled={!rawXml.trim()}
+              className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#7A1420] dark:text-red-400 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ScanLine size={13} /> Processar XML colado
+            </button>
+          </details>
+
+          {error && (
+            <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs bg-rose-50 dark:bg-rose-500/10 px-3 py-2 rounded-lg w-full">
+              <AlertTriangle size={13} /> {error}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {parsed && (
+        <>
+          <Card className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">{parsed.fornecedor || "Fornecedor não identificado"}</div>
+                <div className="text-xs text-slate-400 font-mono mt-0.5">{parsed.chave || "chave de acesso não encontrada"}</div>
+              </div>
+              <Badge tone="brand">Valor total da nota: R$ {parsed.vNF.toFixed(2)}</Badge>
+            </div>
+
+            <div className="overflow-x-auto -mx-5">
+              <table className="w-full text-sm min-w-[680px]">
+                <thead>
+                  <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+                    <th className="py-2 px-5 font-medium"></th>
+                    <th className="py-2 px-5 font-medium">Produto na nota</th>
+                    <th className="py-2 px-5 font-medium text-right">Qtd.</th>
+                    <th className="py-2 px-5 font-medium text-right">Vlr. unit.</th>
+                    <th className="py-2 px-5 font-medium">Vincular ao insumo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.itens.map((it, i) => (
+                    <tr key={i} className="border-b border-slate-50 dark:border-slate-700/50">
+                      <td className="py-3 px-5">
+                        <input type="checkbox" checked={mapeamento[i]?.incluir ?? false}
+                          onChange={e => updateMap(i, { incluir: e.target.checked })}
+                          className="w-4 h-4 accent-[#7A1420]" />
+                      </td>
+                      <td className="py-3 px-5 text-slate-800 dark:text-slate-200 font-medium">{it.xProd}</td>
+                      <td className="py-3 px-5 text-right text-slate-700 dark:text-slate-300">{it.qCom} {it.uCom}</td>
+                      <td className="py-3 px-5 text-right text-slate-500 dark:text-slate-400">R$ {it.vUnCom.toFixed(2)}</td>
+                      <td className="py-3 px-5">
+                        <select
+                          value={mapeamento[i]?.cod ?? ""}
+                          onChange={e => updateMap(i, { cod: e.target.value, incluir: !!e.target.value })}
+                          className="bg-slate-50 dark:bg-slate-700/40 rounded-lg px-2 py-1.5 text-xs outline-none text-slate-700 dark:text-slate-200 max-w-[200px]"
+                        >
+                          <option value="">— não vincular —</option>
+                          {estoqueItens.map(e => <option key={e.cod} value={e.cod}>{e.nome}</option>)}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-3 px-1">Itens sem correspondência no cadastro vêm desmarcados — vincule manualmente ou deixe de fora da entrada.</p>
+          </Card>
+
+          <Card className="p-5">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Contas a pagar geradas</h4>
+            {parsed.duplicatas.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {parsed.duplicatas.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm bg-slate-50 dark:bg-slate-700/30 rounded-xl px-4 py-2.5">
+                    <span className="text-slate-600 dark:text-slate-300">Parcela {d.nDup || i + 1} · vence {new Date(d.dVenc + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">R$ {d.vDup.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Nenhuma duplicata (fatura/boleto) encontrada no XML — será lançado um único título de R$ {parsed.vNF.toFixed(2)} em Contas a Pagar, com vencimento a definir.</p>
+            )}
+          </Card>
+
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setParsed(null); setRawXml(""); }} className="text-sm text-slate-500 dark:text-slate-400 px-4 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/40">Cancelar</button>
+            <button onClick={handleConfirm} className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+              <CheckCircle2 size={15} /> Dar entrada no estoque
+            </button>
+          </div>
+        </>
+      )}
+
+      <Card className="p-4">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 px-1">Histórico de notas importadas</h4>
+        {historico.length === 0 ? (
+          <p className="text-sm text-slate-400 px-1 py-4 text-center">Nenhuma NF-e importada ainda.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {historico.map((h, i) => (
+              <div key={i} className="flex items-center justify-between text-sm bg-slate-50 dark:bg-slate-700/30 rounded-xl px-4 py-2.5">
+                <div>
+                  <div className="font-medium text-slate-800 dark:text-slate-200">{h.fornecedor || "Fornecedor não identificado"}</div>
+                  <div className="text-[11px] text-slate-400 font-mono">{h.chave}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium text-slate-700 dark:text-slate-300">R$ {h.vNF.toFixed(2)}</div>
+                  <div className="text-[11px] text-slate-400">{h.itens.length} item(ns)</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function Compras({ estoqueItens, onRegistrarCompraManual, historicoManual, onRegistrarBoleto, historicoBoleto, onRegistrarXml, historicoXml }) {
+  const [tab, setTab] = useState("pedidos");
+  const statusTone = { recebido: "green", parcial: "brand", pendente: "amber", cancelado: "red" };
+  const statusLabel = { recebido: "Recebido", parcial: "Recebimento parcial", pendente: "Pendente", cancelado: "Cancelado" };
+  const statusIcon = { recebido: PackageCheck, parcial: Truck, pendente: Clock, cancelado: XCircle };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Compras</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">R$ 15.300,00 em pedidos abertos com fornecedores</p>
+        </div>
+        {tab === "pedidos" && (
+          <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+            <Plus size={15} /> Novo pedido de compra
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-700/40 rounded-xl p-1 w-fit overflow-x-auto">
+        <button onClick={() => setTab("pedidos")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "pedidos" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Pedidos de compra</button>
+        <button onClick={() => setTab("cotacoes")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap", tab === "cotacoes" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>
+          Cotações
+          <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-full px-1.5 py-0.5">1</span>
+        </button>
+        <button onClick={() => setTab("manual")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "manual" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Compra manual</button>
+        <button onClick={() => setTab("boleto")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "boleto" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Entrada por boleto</button>
+        <button onClick={() => setTab("xml")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5", tab === "xml" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>
+          <FileCode2 size={13} /> Entrada por XML
+        </button>
+      </div>
+
+      {tab === "cotacoes" && <Cotacoes />}
+
+      {tab === "manual" && (
+        <CompraManual estoqueItens={estoqueItens} onRegistrar={onRegistrarCompraManual} historico={historicoManual} />
+      )}
+
+      {tab === "boleto" && (
+        <EntradaBoleto estoqueItens={estoqueItens} onRegistrar={onRegistrarBoleto} historico={historicoBoleto} />
+      )}
+
+      {tab === "xml" && (
+        <EntradaXML estoqueItens={estoqueItens} onRegistrar={onRegistrarXml} historico={historicoXml} />
+      )}
+
+      {tab === "pedidos" && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KPI label="Pedidos abertos" value="4" delta="R$ 15.300,00" positive icon={FileText} />
+            <KPI label="Recebidos (mês)" value="14" delta="+3 vs mês anterior" positive icon={PackageCheck} />
+            <KPI label="Fornecedores ativos" value="9" delta="1 novo este mês" positive icon={Truck} />
+            <KPI label="Prazo médio entrega" value="3,2 dias" delta="-0,5 dia vs média" positive icon={Clock} />
+          </div>
+
+          <Card className="p-4">
+            <div className="overflow-x-auto -mx-4">
+              <table className="w-full text-sm min-w-[680px]">
+                <thead>
+                  <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
+                    <th className="py-2.5 px-4 font-medium">Pedido</th>
+                    <th className="py-2.5 px-4 font-medium">Fornecedor</th>
+                    <th className="py-2.5 px-4 font-medium">Itens</th>
+                    <th className="py-2.5 px-4 font-medium text-right">Valor</th>
+                    <th className="py-2.5 px-4 font-medium">Status</th>
+                    <th className="py-2.5 px-4 font-medium">Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidosCompra.map(p => {
+                    const Icon = statusIcon[p.status];
+                    return (
+                      <tr key={p.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/20">
+                        <td className="py-3 px-4 font-mono text-xs text-slate-400">{p.id}</td>
+                        <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{p.fornecedor}</td>
+                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400 max-w-[220px] truncate">{p.itens}</td>
+                        <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{p.valor}</td>
+                        <td className="py-3 px-4">
+                          <Badge tone={statusTone[p.status]}>
+                            <span className="inline-flex items-center gap-1"><Icon size={11} /> {statusLabel[p.status]}</span>
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{p.data}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function EmBreve({ label }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-[60vh] text-center gap-3">
+      <div className="w-14 h-14 rounded-2xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+        <Loader2 size={22} className="text-[#7A1420] dark:text-red-400" />
+      </div>
+      <h3 className="font-semibold text-slate-700 dark:text-slate-200">{label}</h3>
+      <p className="text-sm text-slate-400 max-w-xs">Este módulo entra no próximo pacote do protótipo — dá pra priorizar quando quiser.</p>
+    </div>
+  );
+}
+
+export default function ImperialERP() {
+  const [dark, setDark] = useState(true);
+  const [active, setActive] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [estoqueItens, setEstoqueItens] = useState(initialEstoque);
+  const [movs, setMovs] = useState(initialMovs);
+  const [historicoManual, setHistoricoManual] = useState([]);
+  const [contasPagar, setContasPagar] = useState(initialContasPagar);
+  const [historicoBoleto, setHistoricoBoleto] = useState([]);
+  const [historicoXml, setHistoricoXml] = useState([]);
+  const [apiStatus, setApiStatus] = useState(api.enabled ? "connecting" : "demo");
+
+  async function syncFromApi() {
+    if (!api.enabled) return;
+    try {
+      await api.ensureSession();
+      const [insumos, movimentacoes, pagar] = await Promise.all([
+        api.getInsumos(), api.getMovimentacoes(), api.getContasPagar(),
+      ]);
+      setEstoqueItens(insumos.data);
+      setMovs(movimentacoes.data.map(m => ({ ...m, hora: "sincronizado" })));
+      setContasPagar(pagar.data.map(c => ({
+        ...c,
+        valor: Number(c.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      })));
+      setApiStatus("online");
+    } catch (error) {
+      console.warn("API indisponível; mantendo dados locais de demonstração.", error);
+      setApiStatus("error");
+    }
+  }
+
+  useEffect(() => { syncFromApi(); }, []);
+
+  function handleRegistrarCompraManual(entrada) {
+    setEstoqueItens(prev => prev.map(it =>
+      it.cod === entrada.insumoCod
+        ? { ...it, qtd: it.qtd + entrada.quantidade, status: statusFor(it.qtd + entrada.quantidade, it.min) }
+        : it
+    ));
+    setMovs(prev => [
+      { tipo: "entrada", desc: `Compra manual (sem nota) — ${entrada.insumoNome}${entrada.fornecedor ? " · " + entrada.fornecedor : ""}`, qtd: `+${entrada.quantidade} ${entrada.un}`, hora: "agora mesmo" },
+      ...prev,
+    ]);
+    setHistoricoManual(prev => [entrada, ...prev]);
+    if (apiStatus === "online") {
+      api.compraManual({
+        insumoCodigo: entrada.insumoCod,
+        quantidade: entrada.quantidade,
+        custoUnitario: entrada.custo,
+        fornecedor: entrada.fornecedor,
+        formaPagamento: entrada.pagamento,
+        observacao: entrada.obs || undefined,
+      }).then(syncFromApi).catch(() => setApiStatus("error"));
+    }
+  }
+
+  function handleRegistrarBoleto(entrada) {
+    setEstoqueItens(prev => prev.map(it =>
+      it.cod === entrada.insumoCod
+        ? { ...it, qtd: it.qtd + entrada.quantidade, status: statusFor(it.qtd + entrada.quantidade, it.min) }
+        : it
+    ));
+    setMovs(prev => [
+      { tipo: "entrada", desc: `Entrada por boleto — ${entrada.insumoNome} · ${entrada.fornecedor}`, qtd: `+${entrada.quantidade} ${entrada.un}`, hora: "agora mesmo" },
+      ...prev,
+    ]);
+    setContasPagar(prev => [
+      { desc: `Boleto — ${entrada.fornecedor} (${entrada.insumoNome})`, venc: new Date(entrada.vencimento + "T00:00:00").toLocaleDateString("pt-BR"), valor: `R$ ${entrada.valor.toFixed(2)}`, status: "aberto" },
+      ...prev,
+    ]);
+    setHistoricoBoleto(prev => [entrada, ...prev]);
+    if (apiStatus === "online") {
+      api.entradaBoleto({
+        insumoCodigo: entrada.insumoCod,
+        quantidade: entrada.quantidade,
+        fornecedor: entrada.fornecedor,
+        linhaDigitavel: entrada.linhaDigitavel || undefined,
+        valor: entrada.valor,
+        vencimento: entrada.vencimento,
+      }).then(syncFromApi).catch(() => setApiStatus("error"));
+    }
+  }
+
+  function handleRegistrarXml(nota) {
+    setEstoqueItens(prev => prev.map(it => {
+      const match = nota.itens.find(ni => ni.cod === it.cod);
+      if (!match) return it;
+      const novaQtd = it.qtd + match.qCom;
+      return { ...it, qtd: novaQtd, status: statusFor(novaQtd, it.min) };
+    }));
+
+    setMovs(prev => [
+      ...nota.itens.map(it => ({
+        tipo: "entrada",
+        desc: `Entrada por XML NF-e — ${it.xProd} · ${nota.fornecedor}`,
+        qtd: `+${it.qCom} ${it.uCom}`,
+        hora: "agora mesmo",
+      })),
+      ...prev,
+    ]);
+
+    if (nota.duplicatas.length > 0) {
+      setContasPagar(prev => [
+        ...nota.duplicatas.map((d, i) => ({
+          desc: `NF-e ${nota.fornecedor} — parcela ${d.nDup || i + 1}`,
+          venc: d.dVenc ? new Date(d.dVenc + "T00:00:00").toLocaleDateString("pt-BR") : "A definir",
+          valor: `R$ ${d.vDup.toFixed(2)}`,
+          status: "aberto",
+        })),
+        ...prev,
+      ]);
+    } else {
+      setContasPagar(prev => [
+        { desc: `NF-e ${nota.fornecedor}`, venc: "A definir", valor: `R$ ${nota.vNF.toFixed(2)}`, status: "aberto" },
+        ...prev,
+      ]);
+    }
+
+    setHistoricoXml(prev => [nota, ...prev]);
+    if (apiStatus === "online") {
+      api.entradaXml({
+        chave: nota.chave || `SEM-CHAVE-${Date.now()}`,
+        fornecedor: nota.fornecedor || "Fornecedor não identificado",
+        cnpj: nota.cnpj || undefined,
+        valorTotal: nota.vNF,
+        itens: nota.itens.map(it => ({
+          insumoCodigo: it.cod,
+          codigoProduto: it.cProd || undefined,
+          descricao: it.xProd,
+          unidade: it.uCom,
+          quantidade: it.qCom,
+          valorUnitario: it.vUnCom,
+        })),
+        duplicatas: nota.duplicatas.map(d => ({
+          numero: d.nDup || undefined,
+          vencimento: d.dVenc || undefined,
+          valor: d.vDup,
+        })),
+      }).then(syncFromApi).catch(() => setApiStatus("error"));
+    }
+  }
+
+  const activeMeta = NAV.find(n => n.key === active);
+
+  return (
+    <div className={dark ? "dark" : ""}>
+      <div className="min-h-[720px] bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex font-sans">
+
+        {/* Sidebar */}
+        <aside className={cx(
+          "fixed lg:static z-30 inset-y-0 left-0 w-64 bg-[#3D0007] dark:bg-[#2B0005] text-red-100/80 flex flex-col transition-transform duration-200",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        )}>
+          <div className="flex items-center gap-2.5 px-5 h-16 border-b border-white/10">
+            <BrandCrest size={32} className="text-white shrink-0" />
+            <div className="min-w-0">
+              <div className="font-semibold text-white tracking-tight leading-tight truncate">Império das Parmegianas</div>
+              <div className="text-[10px] text-red-200/60 tracking-wide">IMPERIAL ERP</div>
+            </div>
+          </div>
+          <nav className="flex-1 overflow-y-auto py-3 px-3 flex flex-col gap-0.5">
+            {NAV.map(item => {
+              const Icon = item.icon;
+              const isActive = active === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => { setActive(item.key); setSidebarOpen(false); }}
+                  className={cx(
+                    "flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors relative",
+                    isActive ? "bg-[#7A1420] text-white" : "hover:bg-white/5 text-red-100/70"
+                  )}
+                >
+                  <Icon size={16} />
+                  {item.label}
+                  {!READY.includes(item.key) && !isActive && (
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/20" />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="p-3 border-t border-white/10">
+            <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 cursor-pointer">
+              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-medium text-white">RS</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-white truncate">Rafael Souza</div>
+                <div className="text-[11px] text-red-200/60 truncate">Administrador</div>
+              </div>
+              <ChevronDown size={14} className="text-red-200/50" />
+            </div>
+          </div>
+        </aside>
+
+        {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/40 z-20 lg:hidden" />}
+
+        {/* Main */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="h-16 border-b border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-800/60 flex items-center justify-between px-4 sm:px-6 gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-500">☰</button>
+              <div className="min-w-0">
+                <h1 className="font-semibold text-slate-900 dark:text-white leading-tight truncate">{activeMeta?.label}</h1>
+                <p className="text-xs text-slate-400 hidden sm:block">Império das Parmegianas · Delivery</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="hidden md:flex items-center gap-2 bg-slate-50 dark:bg-slate-700/40 rounded-xl px-3 py-2 w-56">
+                <Search size={14} className="text-slate-400" />
+                <input placeholder="Buscar no sistema..." className="bg-transparent outline-none text-sm w-full placeholder:text-slate-400" />
+              </div>
+              <button className="relative w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-300">
+                <Bell size={16} />
+                <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-rose-500" />
+              </button>
+              <button onClick={() => setDark(d => !d)} className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-300">
+                {dark ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+            {apiStatus !== "online" && (
+              <div className={cx(
+                "mb-4 rounded-xl border px-4 py-2.5 text-xs",
+                apiStatus === "connecting"
+                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+                  : "border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400"
+              )}>
+                {apiStatus === "connecting" ? "Conectando ao servidor…" : "Modo demonstração ativo — configure VITE_API_URL para persistir os dados no PostgreSQL."}
+              </div>
+            )}
+            {active === "dashboard" && <Dashboard movs={movs} />}
+            {active === "estoque" && <Estoque itens={estoqueItens} />}
+            {active === "producao" && <Producao />}
+            {active === "vendas" && <Vendas />}
+            {active === "compras" && (
+              <Compras
+                estoqueItens={estoqueItens}
+                onRegistrarCompraManual={handleRegistrarCompraManual}
+                historicoManual={historicoManual}
+                onRegistrarBoleto={handleRegistrarBoleto}
+                historicoBoleto={historicoBoleto}
+                onRegistrarXml={handleRegistrarXml}
+                historicoXml={historicoXml}
+              />
+            )}
+            {active === "financeiro" && <Financeiro contasPagar={contasPagar} />}
+            {!READY.includes(active) && <EmBreve label={activeMeta?.label} />}
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
