@@ -129,53 +129,68 @@ model Movimentacao {
 }
 
 model Fornecedor {
-  id           String    @id @default(cuid())
-  nome         String
-  cnpj         String?   @unique
-  email        String?
-  telefone     String?
-  ativo        Boolean   @default(true)
-  pedidos      PedidoCompra[]
-  propostas    CotacaoFornecedor[]
-  criadoEm     DateTime  @default(now())
-  atualizadoEm DateTime  @updatedAt
+  id             String              @id @default(cuid())
+  nome           String
+  cnpj           String?             @unique
+  email          String?
+  telefone       String?
+  endereco       String?
+  observacao     String?
+  ativo          Boolean             @default(true)
+  pedidos        PedidoCompra[]
+  propostas      CotacaoFornecedor[]
+  comprasManuais CompraManual[]
+  entradasBoleto EntradaBoleto[]
+  notasFiscais   NotaFiscalXml[]
+  criadoEm       DateTime            @default(now())
+  atualizadoEm   DateTime            @updatedAt
+  @@index([nome])
 }
 
 model CompraManual {
-  id            String   @id @default(cuid())
-  insumoId      String
-  insumo        Insumo   @relation(fields: [insumoId], references: [id])
-  quantidade    Decimal  @db.Decimal(14, 3)
-  custoUnitario Decimal  @db.Decimal(14, 4)
+  id             String      @id @default(cuid())
+  insumoId       String
+  insumo         Insumo      @relation(fields: [insumoId], references: [id])
+  quantidade     Decimal     @db.Decimal(14, 3)
+  custoUnitario  Decimal     @db.Decimal(14, 4)
   fornecedorNome String
+  fornecedorId   String?
+  fornecedor     Fornecedor? @relation(fields: [fornecedorId], references: [id])
   formaPagamento String
-  observacao    String?
-  criadoEm      DateTime @default(now())
+  observacao     String?
+  criadoEm       DateTime    @default(now())
+  @@index([fornecedorId])
 }
 
 model EntradaBoleto {
-  id            String   @id @default(cuid())
-  insumoId      String
-  insumo        Insumo   @relation(fields: [insumoId], references: [id])
-  quantidade    Decimal  @db.Decimal(14, 3)
+  id             String      @id @default(cuid())
+  insumoId       String
+  insumo         Insumo      @relation(fields: [insumoId], references: [id])
+  quantidade     Decimal     @db.Decimal(14, 3)
   fornecedorNome String
+  fornecedorId   String?
+  fornecedor     Fornecedor? @relation(fields: [fornecedorId], references: [id])
   linhaDigitavel String?
-  valor         Decimal  @db.Decimal(14, 2)
-  vencimento    DateTime
-  contaPagar    ContaPagar?
-  criadoEm      DateTime @default(now())
+  valor          Decimal     @db.Decimal(14, 2)
+  vencimento     DateTime
+  contaPagar     ContaPagar?
+  criadoEm       DateTime    @default(now())
+  @@index([fornecedorId])
 }
 
 model NotaFiscalXml {
-  id            String            @id @default(cuid())
-  chave         String            @unique
+  id             String            @id @default(cuid())
+  chave          String            @unique
   fornecedorNome String
-  cnpj          String?
-  valorTotal    Decimal           @db.Decimal(14, 2)
-  xmlOriginal   String?
-  itens         NotaFiscalItem[]
-  contasPagar   ContaPagar[]
-  criadoEm      DateTime          @default(now())
+  fornecedorId   String?
+  fornecedor     Fornecedor?       @relation(fields: [fornecedorId], references: [id])
+  cnpj           String?
+  valorTotal     Decimal           @db.Decimal(14, 2)
+  xmlOriginal    String?
+  itens          NotaFiscalItem[]
+  contasPagar    ContaPagar[]
+  criadoEm       DateTime          @default(now())
+  @@index([fornecedorId])
 }
 
 model NotaFiscalItem {

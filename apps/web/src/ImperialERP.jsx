@@ -7975,6 +7975,7 @@ const NAV = [
   { key: "receitas", label: "Produtos / Fichas", icon: FlaskConical },
   { key: "producao", label: "Cozinha / Preparo", icon: ChefHat },
   { key: "compras", label: "Compras", icon: Truck },
+  { key: "fornecedores", label: "Fornecedores", icon: Users },
   { key: "vendas", label: "Pedidos / Vendas", icon: ShoppingCart },
   { key: "entregas", label: "Motos / Entregas", icon: Bike },
   { key: "operacional", label: "Erros / Cancelamentos", icon: AlertTriangle },
@@ -7987,7 +7988,7 @@ const NAV = [
   { key: "config", label: "Configurações", icon: Settings },
 ];
 
-const READY = ["dashboard", "estoque", "receitas", "producao", "vendas", "compras", "entregas", "operacional", "caixa", "financeiro", "relatorios", "integracoes", "config"];
+const READY = ["dashboard", "estoque", "receitas", "producao", "vendas", "compras", "fornecedores", "entregas", "operacional", "caixa", "financeiro", "relatorios", "integracoes", "config"];
 
 function cx(...a) { return a.filter(Boolean).join(" "); }
 
@@ -10547,6 +10548,271 @@ function EmBreve({ label }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Fornecedores
+// ---------------------------------------------------------------------------
+
+function Fornecedores() {
+  const [fornecedores, setFornecedores] = useState([]);
+  const [busca, setBusca] = useState("");
+  const [modalAberto, setModalAberto] = useState(false);
+  const [fornecedorEdit, setFornecedorEdit] = useState(null);
+  const [fornecedorSelecionado, setFornecedorSelecionado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const carregarFornecedores = async () => {
+    setLoading(true);
+    try {
+      const data = await api.getFornecedores({ busca });
+      setFornecedores(data || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { carregarFornecedores(); }, [busca]);
+
+  const handleSalvar = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const dados = Object.fromEntries(formData);
+    
+    try {
+      if (fornecedorEdit?.id) {
+        await api.atualizarFornecedor(fornecedorEdit.id, dados);
+      } else {
+        await api.cadastrarFornecedor(dados);
+      }
+      setModalAberto(false);
+      carregarFornecedores();
+    } catch (e) {
+      alert("Erro ao salvar: " + e.message);
+    }
+  };
+
+  const handleDesativar = async (id) => {
+    if (!confirm("Tem certeza que deseja desativar este fornecedor?")) return;
+    try {
+      await api.desativarFornecedor(id);
+      carregarFornecedores();
+      setFornecedorSelecionado(null);
+    } catch (e) {
+      alert("Erro: " + e.message);
+    }
+  };
+
+  const verDetalhes = async (id) => {
+    setLoading(true);
+    try {
+      const data = await api.getFornecedor(id);
+      setFornecedorSelecionado(data);
+    } catch (e) {
+      alert("Erro ao carregar detalhes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (fornecedorSelecionado) {
+    const f = fornecedorSelecionado;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setFornecedorSelecionado(null)} className="p-2 hover:bg-slate-100 rounded-lg dark:hover:bg-slate-800 text-slate-500">
+              <ChevronDown className="rotate-90" size={20} />
+            </button>
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                {f.nome} {!f.ativo && <Badge tone="red">Inativo</Badge>}
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {f.cnpj ? `CNPJ: ${f.cnpj}` : 'Sem CNPJ'} • {f.email || 'Sem e-mail'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setFornecedorEdit(f); setModalAberto(true); }} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">Editar</button>
+            {f.ativo && <button onClick={() => handleDesativar(f.id)} className="px-4 py-2 bg-rose-50 text-rose-600 rounded-lg text-sm font-medium hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20">Desativar</button>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <KPI label="Total em Compras (NFe)" value={f.notasFiscais?.length || 0} icon={FileText} />
+          <KPI label="Compras Manuais" value={f.comprasManuais?.length || 0} icon={ShoppingCart} />
+          <KPI label="Pedidos de Compra" value={f.pedidos?.length || 0} icon={Truck} />
+        </div>
+
+        <Card className="p-6">
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Histórico Recente</h3>
+          <div className="space-y-4">
+            {f.notasFiscais?.map(nf => (
+              <div key={nf.id} className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <div className="font-medium text-slate-900 dark:text-white">Nota Fiscal (XML)</div>
+                  <div className="text-xs text-slate-500">Chave: {nf.chave}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium">R$ {Number(nf.valorTotal).toFixed(2)}</div>
+                  <div className="text-xs text-slate-500">{new Date(nf.criadoEm).toLocaleDateString()}</div>
+                </div>
+              </div>
+            ))}
+            {f.comprasManuais?.map(c => (
+              <div key={c.id} className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <div className="font-medium text-slate-900 dark:text-white">Compra Manual</div>
+                  <div className="text-xs text-slate-500">{c.insumo?.nome} ({c.quantidade} {c.insumo?.unidadeMedida})</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium">R$ {(Number(c.custoUnitario) * Number(c.quantidade)).toFixed(2)}</div>
+                  <div className="text-xs text-slate-500">{new Date(c.criadoEm).toLocaleDateString()}</div>
+                </div>
+              </div>
+            ))}
+            {(!f.notasFiscais?.length && !f.comprasManuais?.length) && (
+              <div className="text-center py-8 text-slate-500 text-sm">Nenhum histórico encontrado para este fornecedor.</div>
+            )}
+          </div>
+        </Card>
+
+        {modalAberto && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <Card className="w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Editar Fornecedor</h3>
+                <button onClick={() => setModalAberto(false)} className="text-slate-400 hover:text-slate-600"><XCircle size={20} /></button>
+              </div>
+              <form onSubmit={handleSalvar} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome *</label>
+                  <input name="nome" required defaultValue={f.nome} className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CNPJ</label>
+                    <input name="cnpj" defaultValue={f.cnpj || ""} className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
+                    <input name="telefone" defaultValue={f.telefone || ""} className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail</label>
+                  <input type="email" name="email" defaultValue={f.email || ""} className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Endereço</label>
+                  <input name="endereco" defaultValue={f.endereco || ""} className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+                </div>
+                <div className="pt-4 flex gap-3">
+                  <button type="button" onClick={() => setModalAberto(false)} className="flex-1 h-10 rounded-lg border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Cancelar</button>
+                  <button type="submit" className="flex-1 h-10 rounded-lg bg-[#7A1420] text-white font-medium hover:bg-[#630f18]">Salvar</button>
+                </div>
+              </form>
+            </Card>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Fornecedores</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestão de parceiros e histórico de compras</p>
+        </div>
+        <button onClick={() => { setFornecedorEdit(null); setModalAberto(true); }} className="h-10 px-4 bg-[#7A1420] text-white rounded-xl text-sm font-medium hover:bg-[#630f18] flex items-center justify-center gap-2 shadow-sm shadow-red-900/20 transition-colors">
+          <Plus size={18} /> Novo Fornecedor
+        </button>
+      </div>
+
+      <div className="flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+             type="text"
+             placeholder="Buscar por nome ou CNPJ..."
+             value={busca}
+             onChange={e => setBusca(e.target.value)}
+             className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-800/60 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all text-sm dark:text-white shadow-sm"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {fornecedores.map(f => (
+          <Card key={f.id} className="p-5 flex flex-col gap-4 cursor-pointer hover:border-[#7A1420]/30 transition-colors group" onClick={() => verDetalhes(f.id)}>
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white group-hover:text-[#7A1420] dark:group-hover:text-red-400 transition-colors">{f.nome}</h3>
+                <p className="text-xs text-slate-500 mt-1">{f.cnpj ? `CNPJ: ${f.cnpj}` : 'Sem CNPJ'}</p>
+              </div>
+              {!f.ativo && <Badge tone="red">Inativo</Badge>}
+              {f.ativo && <Badge tone="green">Ativo</Badge>}
+            </div>
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+              <span className="text-xs text-slate-500">{f.telefone || f.email || 'Sem contato salvo'}</span>
+              <div className="w-8 h-8 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:bg-red-50 dark:group-hover:bg-red-500/10 group-hover:text-[#7A1420] dark:group-hover:text-red-400 transition-colors">
+                <ArrowUpRight size={16} />
+              </div>
+            </div>
+          </Card>
+        ))}
+        {fornecedores.length === 0 && !loading && (
+          <div className="col-span-full py-12 text-center text-slate-500 dark:text-slate-400">
+            Nenhum fornecedor encontrado.
+          </div>
+        )}
+      </div>
+
+      {modalAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Novo Fornecedor</h3>
+              <button onClick={() => setModalAberto(false)} className="text-slate-400 hover:text-slate-600"><XCircle size={20} /></button>
+            </div>
+            <form onSubmit={handleSalvar} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome *</label>
+                <input name="nome" required className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CNPJ</label>
+                  <input name="cnpj" className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
+                  <input name="telefone" className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail</label>
+                <input type="email" name="email" className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Endereço</label>
+                <input name="endereco" className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-[#7A1420] focus:ring-1 focus:ring-[#7A1420] outline-none transition-all dark:text-white" />
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setModalAberto(false)} className="flex-1 h-10 rounded-lg border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Cancelar</button>
+                <button type="submit" className="flex-1 h-10 rounded-lg bg-[#7A1420] text-white font-medium hover:bg-[#630f18]">Salvar</button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ImperialERP() {
   const [dark, setDark] = useState(true);
   const [active, setActive] = useState("dashboard");
@@ -11571,6 +11837,7 @@ export default function ImperialERP() {
                 historicoXml={historicoXml}
               />
             )}
+            {active === "fornecedores" && <Fornecedores />}
             {active === "financeiro" && <Financeiro contasPagar={contasPagar} />}
             {active === "relatorios" && <RelatoriosOperacionais plataformas={dadosPlataformas} corridas={corridas} cancelamentos={cancelamentos} erros={errosOperacionais} ordens={ordens} caixas={caixas} estoqueItens={estoqueItens} fechamentos={fechamentosDiarios} onFecharDia={handleFecharDia} />}
             {active === "integracoes" && <CentralImportacoes estoqueItens={estoqueItens} fichas={fichas} mapeamentos={mapeamentosSichef} importacoes={importacoesSichef} onMapear={handleMapearProdutoSichef} onConfirmar={handleConfirmarImportacao} />}

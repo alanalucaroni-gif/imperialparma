@@ -129,6 +129,24 @@ class ImperialApi {
   removerCredencialIntegracao(plataforma: string) {
     return this.request<any>(`/integracoes/credenciais/${plataforma}`, { method: "DELETE" });
   }
+
+  // --- Fornecedores ---
+  getFornecedores(params?: { busca?: string; ativo?: string }) {
+    const qs = new URLSearchParams(params as any).toString();
+    return this.request<any>(`/fornecedores${qs ? '?' + qs : ''}`);
+  }
+  getFornecedor(id: string) {
+    return this.request<any>(`/fornecedores/${id}`);
+  }
+  cadastrarFornecedor(body: any) {
+    return this.request<any>("/fornecedores", { method: "POST", body: JSON.stringify(body) });
+  }
+  atualizarFornecedor(id: string, body: any) {
+    return this.request<any>(`/fornecedores/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  }
+  desativarFornecedor(id: string) {
+    return this.request<any>(`/fornecedores/${id}`, { method: "DELETE" });
+  }
 }
 
 export const api = new ImperialApi();
