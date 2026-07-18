@@ -33,7 +33,7 @@ services:
       - key: ADMIN_EMAIL
         value: admin@imperial.local
       - key: ADMIN_PASSWORD
-        sync: false
+        value: Imperial@123
 
 databases:
   - name: imperial-erp-db
