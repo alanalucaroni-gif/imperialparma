@@ -11,7 +11,10 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   app.setGlobalPrefix("api");
 
-  const webDist = join(process.cwd(), "apps", "web", "dist");
+  let webDist = join(process.cwd(), "apps", "web", "dist");
+  if (!existsSync(join(webDist, "index.html"))) {
+    webDist = join(process.cwd(), "..", "web", "dist");
+  }
   const webBuildDisponivel = existsSync(join(webDist, "index.html"));
   if (webBuildDisponivel) app.useStaticAssets(webDist, { index: false });
 
