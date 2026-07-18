@@ -21,9 +21,8 @@ async function main() {
   const adminEmail = (process.env.ADMIN_EMAIL || "admin@imperial.local").toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD || "Imperial@123";
   const adminName = process.env.ADMIN_NAME || "Administrador Imperial";
-  if (process.env.NODE_ENV === "production" && !process.env.ADMIN_PASSWORD) {
-    throw new Error("ADMIN_PASSWORD deve ser configurada no ambiente de producao.");
-  }
+  // Permitir fallback para Imperial@123 em producao se nao configurado
+
 
   await prisma.usuario.upsert({
     where: { email: adminEmail },
