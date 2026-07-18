@@ -5,7 +5,7 @@ export class CriarUsuarioDto {
   @IsString() @MinLength(2) nome!: string;
   @IsEmail() email!: string;
   @IsEnum(Role) role!: Role;
-  @IsString() @MinLength(6) senha!: string;
+  @IsString() @MinLength(8) senha!: string;
   @IsOptional() @IsBoolean() ativo?: boolean;
 }
 
@@ -17,5 +17,5 @@ export class AtualizarUsuarioDto {
 }
 
 export class RedefinirSenhaUsuarioDto {
-  @IsString() @MinLength(6) senha!: string;
+  @IsString() @MinLength(8) senha!: string;
 }

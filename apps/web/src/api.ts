@@ -6,6 +6,11 @@ type LoginResponse = {
   usuario: { id: string; nome: string; email: string; role: string };
 };
 
+export type Usuario = LoginResponse["usuario"] & {
+  ativo: boolean;
+  criadoEm: string;
+  atualizadoEm: string;
+};
 const ACCESS_KEY = "imperial.accessToken";
 const REFRESH_KEY = "imperial.refreshToken";
 const USER_KEY = "imperial.usuario";
@@ -101,6 +106,18 @@ class ImperialApi {
     if (this.hasSession) return true;
     return this.renovarSessao();
   }
+
+  getUsuarios() { return this.request<Usuario[]>("/usuarios"); }
+  cadastrarUsuario(body: { nome: string; email: string; role: string; senha: string; ativo?: boolean }) {
+    return this.request<Usuario>("/usuarios", { method: "POST", body: JSON.stringify(body) });
+  }
+  atualizarUsuario(id: string, body: { nome?: string; email?: string; role?: string; ativo?: boolean }) {
+    return this.request<Usuario>(`/usuarios/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  }
+  redefinirSenhaUsuario(id: string, senha: string) {
+    return this.request<{ message: string }>(`/usuarios/${id}/senha`, { method: "PATCH", body: JSON.stringify({ senha }) });
+  }
+  desativarUsuario(id: string) { return this.request<Usuario>(`/usuarios/${id}`, { method: "DELETE" }); }
 
   getInsumos() { return this.request<any>("/estoque/insumos?limit=100"); }
   cadastrarInsumo(body: any) { return this.request<any>("/estoque/insumos", { method: "POST", body: JSON.stringify(body) }); }

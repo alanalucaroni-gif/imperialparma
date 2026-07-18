@@ -7,6 +7,7 @@ import { FinanceiroModule } from "./financeiro/financeiro.module.js";
 import { IntegracoesModule } from "./integracoes/integracoes.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { FornecedoresModule } from "./fornecedores/fornecedores.module.js";
+import { UsuariosModule } from "./usuarios/usuarios.module.js";
 
 @Controller("health")
 class HealthController {
@@ -15,7 +16,7 @@ class HealthController {
 }
 
 @Module({
-  imports: [PrismaModule, AuthModule, EstoqueModule, ComprasModule, CotacoesModule, FinanceiroModule, IntegracoesModule, FornecedoresModule],
+  imports: [PrismaModule, AuthModule, EstoqueModule, ComprasModule, CotacoesModule, FinanceiroModule, IntegracoesModule, FornecedoresModule, UsuariosModule],
   controllers: [HealthController],
 })
 export class AppModule {}
