@@ -27,7 +27,7 @@ async function main() {
 
   await prisma.usuario.upsert({
     where: { email: adminEmail },
-    update: {},
+    update: { nome: adminName, senhaHash: await hash(adminPassword, 12), role: Role.ADMINISTRADOR },
     create: { nome: adminName, email: adminEmail, senhaHash: await hash(adminPassword, 12), role: Role.ADMINISTRADOR },
   });
   for (const [codigo, nome, categoria, unidade, quantidade, estoqueMinimo, custoUnitario] of insumos) {
