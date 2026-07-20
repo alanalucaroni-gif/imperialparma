@@ -18,7 +18,7 @@ BEGIN
   ) THEN
     ALTER TABLE "receitas"
       ADD CONSTRAINT "receitas_produtoFinalId_fkey"
-      FOREIGN KEY ("produtoFinalId") REFERENCES "insumos"("id")
+      FOREIGN KEY ("produtoFinalId") REFERENCES "Insumo"("id")
       ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
 END $$;
