@@ -8189,7 +8189,7 @@ function Dashboard({ movs, estoqueItens }) {
   );
 }
 
-function EstoqueSaldos({ itens, onMovimentar, onXml, onAtualizarMinimo, onAcertarEstoque, onExcluirItem }) {
+function EstoqueSaldos({ itens, onMovimentar, onXml, onAtualizarMinimo, onAcertarEstoque, onExcluirItem, onCadastrarItem }) {
   const [q, setQ] = useState("");
   const [minimosEdicao, setMinimosEdicao] = useState({});
   const [salvandoMinimo, setSalvandoMinimo] = useState(null);
@@ -8200,6 +8200,9 @@ function EstoqueSaldos({ itens, onMovimentar, onXml, onAtualizarMinimo, onAcerta
   const [salvandoAcerto, setSalvandoAcerto] = useState(false);
   const [itemExcluir, setItemExcluir] = useState(null);
   const [excluindoItem, setExcluindoItem] = useState(false);
+  const [novoItemAberto, setNovoItemAberto] = useState(false);
+  const [novoItem, setNovoItem] = useState({ codigo: "", nome: "", categoria: "", unidade: "un", quantidade: "0", minimo: "0", custo: "0" });
+  const [salvandoNovoItem, setSalvandoNovoItem] = useState(false);
   const filtered = useMemo(() =>
     itens.filter(p => p.nome.toLowerCase().includes(q.toLowerCase()) || p.cod.toLowerCase().includes(q.toLowerCase())),
   [q, itens]);
@@ -8266,6 +8269,33 @@ function EstoqueSaldos({ itens, onMovimentar, onXml, onAtualizarMinimo, onAcerta
     }
   }
 
+  async function salvarNovoItemEstoque(e) {
+    e.preventDefault();
+    if (novoItem.nome.trim().length < 2 || !novoItem.categoria.trim()) {
+      setFeedbackItem({ tone: "red", text: "Informe nome e categoria do item." });
+      return;
+    }
+    const numero = valor => Number(String(valor || "0").replace(",", ".")) || 0;
+    setSalvandoNovoItem(true);
+    try {
+      const resultado = await onCadastrarItem({
+        codigo: novoItem.codigo.trim(),
+        nome: novoItem.nome.trim(),
+        categoria: novoItem.categoria.trim(),
+        unidade: novoItem.unidade,
+        quantidade: numero(novoItem.quantidade),
+        estoqueMinimo: numero(novoItem.minimo),
+        custoUnitario: numero(novoItem.custo),
+      });
+      setFeedbackItem(resultado);
+      if (resultado.tone === "green") {
+        setNovoItem({ codigo: "", nome: "", categoria: "", unidade: "un", quantidade: "0", minimo: "0", custo: "0" });
+        setNovoItemAberto(false);
+      }
+    } finally {
+      setSalvandoNovoItem(false);
+    }
+  }
   function editarMinimo(item) {
     setMinimosEdicao(prev => ({ ...prev, [item.cod]: prev[item.cod] ?? item.min ?? 0 }));
     setMenuAberto(null);
@@ -8279,9 +8309,10 @@ function EstoqueSaldos({ itens, onMovimentar, onXml, onAtualizarMinimo, onAcerta
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Estoque</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">{itens.length} itens ativos · {valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} em valor total</p>
         </div>
-        <div className="flex flex-wrap gap-2"><button onClick={onXml} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-sm font-medium px-4 py-2 rounded-xl"><FileCode2 size={15} /> Entrada por XML</button><button onClick={() => onMovimentar()} className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"><Plus size={15} /> Entrada / saída</button></div>
+        <div className="flex flex-wrap gap-2"><button onClick={() => setNovoItemAberto(true)} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"><Plus size={15} /> Novo item</button><button onClick={onXml} className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-sm font-medium px-4 py-2 rounded-xl"><FileCode2 size={15} /> Entrada por XML</button><button onClick={() => onMovimentar()} className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"><Plus size={15} /> Entrada / saída</button></div>
       </div>
 
+      {novoItemAberto && <Card className="p-5 border-emerald-200 dark:border-emerald-500/30"><div className="mb-4"><h3 className="font-semibold text-slate-900 dark:text-white">Adicionar item ao estoque</h3><p className="text-xs text-slate-400 mt-1">O item ficará disponível imediatamente para Estoque, Compras e fichas técnicas.</p></div><form onSubmit={salvarNovoItemEstoque} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"><label className="text-xs text-slate-500">Código (opcional)<input value={novoItem.codigo} onChange={e => setNovoItem(prev => ({ ...prev, codigo: e.target.value }))} placeholder="Automático" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800" /></label><label className="text-xs text-slate-500 sm:col-span-2">Nome do item<input autoFocus required value={novoItem.nome} onChange={e => setNovoItem(prev => ({ ...prev, nome: e.target.value }))} placeholder="Ex.: Queijo mussarela" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800" /></label><label className="text-xs text-slate-500">Categoria<input required value={novoItem.categoria} onChange={e => setNovoItem(prev => ({ ...prev, categoria: e.target.value }))} placeholder="Ex.: Composição" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800" /></label><label className="text-xs text-slate-500">Unidade<select value={novoItem.unidade} onChange={e => setNovoItem(prev => ({ ...prev, unidade: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"><option value="un">Unidade (un)</option><option value="kg">Quilograma (kg)</option><option value="g">Grama (g)</option><option value="l">Litro (l)</option><option value="ml">Mililitro (ml)</option><option value="cx">Caixa (cx)</option></select></label><label className="text-xs text-slate-500">Saldo inicial<input inputMode="decimal" value={novoItem.quantidade} onChange={e => setNovoItem(prev => ({ ...prev, quantidade: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800" /></label><label className="text-xs text-slate-500">Estoque mínimo<input inputMode="decimal" value={novoItem.minimo} onChange={e => setNovoItem(prev => ({ ...prev, minimo: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800" /></label><label className="text-xs text-slate-500">Custo unitário (R$)<input inputMode="decimal" value={novoItem.custo} onChange={e => setNovoItem(prev => ({ ...prev, custo: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800" /></label><div className="flex items-end justify-end gap-2 sm:col-span-2 xl:col-span-4"><button type="button" onClick={() => setNovoItemAberto(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm dark:border-slate-600">Cancelar</button><button disabled={salvandoNovoItem} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{salvandoNovoItem ? "Salvando..." : "Cadastrar item"}</button></div></form></Card>}
       {acertoItem && <Card className="p-5 border-sky-200 dark:border-sky-500/30"><div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4"><div><div className="flex items-center gap-2"><ScanLine size={18} className="text-sky-600" /><h3 className="font-semibold text-slate-900 dark:text-white">Acerto de estoque</h3></div><p className="text-xs text-slate-400 mt-1">{acertoItem.nome} · saldo do sistema: {acertoItem.qtd.toLocaleString("pt-BR")} {acertoItem.un}</p></div><form onSubmit={salvarAcerto} className="flex flex-col sm:flex-row sm:items-end gap-3"><label className="text-xs text-slate-500">Quantidade contada no inventário<input autoFocus inputMode="decimal" value={quantidadeContada} onChange={e => setQuantidadeContada(e.target.value)} className="mt-1 w-full sm:w-52 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm" /></label><div className="text-xs text-slate-500 sm:pb-3">Diferença: {(Number(String(quantidadeContada).replace(",", ".")) - acertoItem.qtd || 0).toLocaleString("pt-BR")} {acertoItem.un}</div><button type="button" onClick={() => setAcertoItem(null)} className="rounded-xl border border-slate-200 dark:border-slate-600 text-sm px-4 py-2.5">Cancelar</button><button disabled={salvandoAcerto} className="rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5">{salvandoAcerto ? "Salvando..." : "Confirmar acerto"}</button></form></div></Card>}
       {itemExcluir && <Card className="p-5 border-rose-200 dark:border-rose-500/30"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h3 className="font-semibold text-rose-700 dark:text-rose-300">Excluir item do estoque?</h3><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{itemExcluir.nome} · {itemExcluir.cod}. Esta ação também remove o produto ligado ao catálogo. Itens usados em fichas técnicas serão protegidos.</p></div><div className="flex gap-2"><button type="button" onClick={() => setItemExcluir(null)} className="rounded-xl border border-slate-200 dark:border-slate-600 text-sm px-4 py-2.5">Cancelar</button><button type="button" disabled={excluindoItem} onClick={confirmarExclusaoItem} className="rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5">{excluindoItem ? "Excluindo..." : "Confirmar exclusão"}</button></div></div></Card>}
       <Card className="p-4">
@@ -8394,12 +8425,12 @@ function MovimentacaoEstoqueManual({ itens, historico, onRegistrar, codigoInicia
     <Card className="overflow-hidden"><div className="p-4 border-b border-slate-100 dark:border-slate-700"><h3 className="font-semibold text-slate-900 dark:text-white text-sm">Histórico manual</h3><p className="text-xs text-slate-400 mt-0.5">Auditoria das alterações realizadas nesta tela</p></div>{historico.length ? <div className="overflow-x-auto"><table className="w-full text-sm min-w-[820px]"><thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100 dark:border-slate-700"><th className="py-2.5 px-4 font-medium">Hora</th><th className="py-2.5 px-4 font-medium">Tipo</th><th className="py-2.5 px-4 font-medium">Produto</th><th className="py-2.5 px-4 font-medium text-right">Quantidade</th><th className="py-2.5 px-4 font-medium text-right">Custo unit.</th><th className="py-2.5 px-4 font-medium">Motivo</th><th className="py-2.5 px-4 font-medium">Responsável</th></tr></thead><tbody>{historico.map(h => <tr key={h.id} className="border-b border-slate-50 dark:border-slate-700/50"><td className="py-3 px-4 text-slate-400">{h.hora}</td><td className="py-3 px-4"><Badge tone={h.tipo === "ajuste" ? "amber" : h.tipo === "entrada" ? "green" : "red"}>{h.tipo === "ajuste" ? "Acerto" : h.tipo === "entrada" ? "Entrada" : "Saída"}</Badge></td><td className="py-3 px-4 font-medium">{h.nome}</td><td className={cx("py-3 px-4 text-right font-medium", h.tipo === "ajuste" ? "text-sky-600" : h.tipo === "entrada" ? "text-emerald-600" : "text-rose-600")}>{h.tipo === "ajuste" ? h.saldoAnterior.toLocaleString("pt-BR") + " → " + h.saldoPosterior.toLocaleString("pt-BR") + " " + h.un : (h.tipo === "entrada" ? "+" : "−") + h.quantidade.toLocaleString("pt-BR") + " " + h.un}</td><td className="py-3 px-4 text-right text-slate-500">{h.custo == null ? "—" : Number(h.custo).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td><td className="py-3 px-4 text-slate-500">{h.motivo}</td><td className="py-3 px-4 text-slate-500">{h.responsavel}</td></tr>)}</tbody></table></div> : <div className="p-10 text-center text-sm text-slate-400">Nenhuma movimentação manual registrada.</div>}</Card>
   </div>;
 }
-function Estoque({ itens, onMovimentar, historicoMovimentos, onRegistrarXml, historicoXml, onAtualizarMinimo, onAcertarEstoque, onExcluirItem }) {
+function Estoque({ itens, onMovimentar, historicoMovimentos, onRegistrarXml, historicoXml, onAtualizarMinimo, onAcertarEstoque, onExcluirItem, onCadastrarItem }) {
   const [tab, setTab] = useState("saldos");
   const [codigoMovimentacao, setCodigoMovimentacao] = useState("");
   return <div className="flex flex-col gap-4">
     <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">{[["saldos", "Saldos"], ["manual", "Entrada / saída manual"], ["xml", "Entrada por XML NF-e"]].map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={cx("px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap", tab === key ? "border-[#7A1420] text-[#7A1420] dark:text-red-300" : "border-transparent text-slate-400")}>{label}</button>)}</div>
-    {tab === "saldos" && <EstoqueSaldos itens={itens} onMovimentar={codigo => { setCodigoMovimentacao(codigo || ""); setTab("manual"); }} onXml={() => setTab("xml")} onAtualizarMinimo={onAtualizarMinimo} onAcertarEstoque={onAcertarEstoque} onExcluirItem={onExcluirItem} />}
+    {tab === "saldos" && <EstoqueSaldos itens={itens} onMovimentar={codigo => { setCodigoMovimentacao(codigo || ""); setTab("manual"); }} onXml={() => setTab("xml")} onAtualizarMinimo={onAtualizarMinimo} onAcertarEstoque={onAcertarEstoque} onExcluirItem={onExcluirItem} onCadastrarItem={onCadastrarItem} />}
     {tab === "manual" && <MovimentacaoEstoqueManual itens={itens} historico={historicoMovimentos} onRegistrar={onMovimentar} codigoInicial={codigoMovimentacao} />}
     {tab === "xml" && <EntradaXML estoqueItens={itens} onRegistrar={onRegistrarXml} historico={historicoXml} />}
   </div>;
@@ -10840,6 +10871,7 @@ function Fornecedores() {
 export default function ImperialERP() {
   const [dark, setDark] = useState(true);
   const [active, setActive] = useState("dashboard");
+  const [abaReceitas, setAbaReceitas] = useState("cadastros");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [estoqueItens, setEstoqueItens] = useState(() => {
     try {
@@ -11841,8 +11873,30 @@ export default function ImperialERP() {
               </div>
             )}
             {active === "dashboard" && <Dashboard movs={movs} estoqueItens={estoqueItens} />}
-            {active === "estoque" && <Estoque itens={estoqueItens} onMovimentar={handleMovimentarEstoqueManual} historicoMovimentos={historicoMovimentosEstoque} onRegistrarXml={handleRegistrarXml} historicoXml={historicoXml} onAtualizarMinimo={handleAtualizarEstoqueMinimo} onAcertarEstoque={handleAcertarEstoque} onExcluirItem={handleExcluirInsumo} />}
-            {active === "receitas" && <ReceitasProducao />}
+            {active === "estoque" && <Estoque itens={estoqueItens} onMovimentar={handleMovimentarEstoqueManual} historicoMovimentos={historicoMovimentosEstoque} onRegistrarXml={handleRegistrarXml} historicoXml={historicoXml} onAtualizarMinimo={handleAtualizarEstoqueMinimo} onAcertarEstoque={handleAcertarEstoque} onExcluirItem={handleExcluirInsumo} onCadastrarItem={handleCadastrarInsumo} />}
+{active === "receitas" && (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-700/40 w-fit">
+                  <button onClick={() => setAbaReceitas("cadastros")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "cadastros" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Produtos, itens e fichas técnicas</button>
+                  <button onClick={() => setAbaReceitas("producao")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "producao" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Receitas de produção</button>
+                </div>
+                {abaReceitas === "cadastros" ? (
+                  <Receitas
+                    receitas={initialReceitas}
+                    produtos={produtos}
+                    categorias={categoriasProduto}
+                    fichas={fichas}
+                    estoqueItens={estoqueItens}
+                    onCadastrarItem={handleCadastrarInsumo}
+                    onAtualizarItem={handleAtualizarInsumo}
+                    onExcluirProduto={handleExcluirProduto}
+                    onSalvarProduto={handleSalvarProduto}
+                    onSalvarCategoria={handleSalvarCategoria}
+                    onSalvarFicha={handleSalvarFicha}
+                  />
+                ) : <ReceitasProducao />}
+              </div>
+            )}
             {active === "producao" && <Producao receitas={initialReceitas} estoqueItens={estoqueItens} ordens={ordens} onCriarOrdem={handleCriarOrdem} onAvancarOrdem={handleAvancarOrdem} />}
             {active === "vendas" && <Vendas />}
             {active === "entregas" && <Entregas entregadores={entregadores} tarifas={tarifasMoto} corridas={corridas} caixaAberto={caixas.find(c => c.status === "aberto")} onCadastrar={handleCadastrarEntregador} onLancarLote={handleLancarLoteCorridas} onSalvarTarifa={handleSalvarTarifa} />}
