@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci --include=dev && npm run db:generate && npm run build
-    startCommand: npm run db:deploy -w @imperial/api && npm run db:seed -w @imperial/api && npm run start -w @imperial/api
+    startCommand: npm run db:repair -w @imperial/api && npm run db:deploy -w @imperial/api && npm run db:seed -w @imperial/api && npm run start -w @imperial/api
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
