@@ -48,6 +48,12 @@ enum OrdemStatus {
   CANCELADA
 }
 
+enum ProducaoReceitaStatus {
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
 enum CompraStatus {
   PENDENTE
   PARCIAL
@@ -105,6 +111,7 @@ model Funcionario {
   observacoes    String?
   fotoUrl        String?
   usuario        Usuario?
+  producoes      ProducaoReceita[]
   criadoEm       DateTime    @default(now())
   atualizadoEm   DateTime    @updatedAt
 
@@ -137,6 +144,7 @@ model Insumo {
   entradasBoleto EntradaBoleto[]
   notasItens    NotaFiscalItem[]
   pedidoItens   PedidoCompraItem[]
+  itensReceita  ItemReceita[]
   criadoEm      DateTime       @default(now())
   atualizadoEm  DateTime       @updatedAt
   @@index([nome])
@@ -293,6 +301,72 @@ model OrdemPreparo {
   atualizadoEm DateTime    @updatedAt
 }
 
+model Receita {
+  id                  String            @id @default(cuid())
+  codigo              String            @unique
+  nome                String
+  categoria           String?
+  descricao           String?
+  fotoUrl             String?
+  rendimento          Decimal           @db.Decimal(14, 3)
+  unidadeRendimento   String
+  tempoPreparoMinutos Int?
+  modoPreparo         String?
+  custoEstimado       Decimal?          @db.Decimal(14, 4)
+  observacoes         String?
+  ativo               Boolean           @default(true)
+  itens               ItemReceita[]
+  producoes           ProducaoReceita[]
+  criadoEm            DateTime          @default(now())
+  atualizadoEm        DateTime          @updatedAt
+
+  @@index([nome])
+  @@index([categoria, ativo])
+  @@map("receitas")
+}
+
+model ItemReceita {
+  id             String   @id @default(cuid())
+  receitaId      String
+  receita        Receita  @relation(fields: [receitaId], references: [id], onDelete: Cascade)
+  insumoId       String?
+  insumo         Insumo?  @relation(fields: [insumoId], references: [id], onDelete: SetNull)
+  nome           String
+  quantidade     Decimal  @db.Decimal(14, 3)
+  unidade        String
+  custoUnitario  Decimal? @db.Decimal(14, 4)
+  criadoEm       DateTime @default(now())
+
+  @@index([receitaId])
+  @@index([insumoId])
+  @@map("itens_receita")
+}
+
+model ProducaoReceita {
+  id                   String                @id @default(cuid())
+  receitaId            String
+  receita              Receita               @relation(fields: [receitaId], references: [id])
+  funcionarioId        String
+  funcionario          Funcionario           @relation(fields: [funcionarioId], references: [id])
+  quantidadeProduzida  Decimal               @db.Decimal(14, 3)
+  unidade              String
+  dataProducao         DateTime
+  horaInicio           DateTime?
+  horaFim              DateTime?
+  lote                 String?
+  validade             DateTime?
+  status               ProducaoReceitaStatus @default(EM_ANDAMENTO)
+  observacoes          String?
+  canceladaEm          DateTime?
+  motivoCancelamento   String?
+  criadoEm             DateTime              @default(now())
+  atualizadoEm         DateTime              @updatedAt
+
+  @@index([receitaId, dataProducao])
+  @@index([funcionarioId, dataProducao])
+  @@index([status, dataProducao])
+  @@map("producoes_receitas")
+}
 model Pedido {
   id             String       @id @default(cuid())
   codigo         String       @unique

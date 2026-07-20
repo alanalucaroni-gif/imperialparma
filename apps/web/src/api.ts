@@ -119,7 +119,23 @@ class ImperialApi {
   }
   desativarUsuario(id: string) { return this.request<Usuario>(`/usuarios/${id}`, { method: "DELETE" }); }
 
-  getInsumos() { return this.request<any>("/estoque/insumos?limit=100"); }
+  // --- Receitas de producao ---
+  getReceitas(params?: Record<string, string | number | boolean | undefined>) { return this.request<any>("/receitas" + this.query(params)); }
+  getReceitasAtivas() { return this.request<any[]>("/receitas/ativas"); }
+  getReceita(id: string) { return this.request<any>("/receitas/" + id); }
+  cadastrarReceita(body: any) { return this.request<any>("/receitas", { method: "POST", body: JSON.stringify(body) }); }
+  atualizarReceita(id: string, body: any) { return this.request<any>("/receitas/" + id, { method: "PATCH", body: JSON.stringify(body) }); }
+  duplicarReceita(id: string) { return this.request<any>("/receitas/" + id + "/duplicar", { method: "POST" }); }
+  excluirReceita(id: string) { return this.request<any>("/receitas/" + id, { method: "DELETE" }); }
+  getProducoesReceitas(params?: Record<string, string | number | boolean | undefined>) { return this.request<any>("/producoes-receitas" + this.query(params)); }
+  getProducaoReceita(id: string) { return this.request<any>("/producoes-receitas/" + id); }
+  cadastrarProducaoReceita(body: any) { return this.request<any>("/producoes-receitas", { method: "POST", body: JSON.stringify(body) }); }
+  atualizarProducaoReceita(id: string, body: any) { return this.request<any>("/producoes-receitas/" + id, { method: "PATCH", body: JSON.stringify(body) }); }
+  cancelarProducaoReceita(id: string, motivo: string) { return this.request<any>("/producoes-receitas/" + id + "/cancelar", { method: "POST", body: JSON.stringify({ motivo }) }); }
+  getIndicadoresProducao(params?: Record<string, string | number | boolean | undefined>) { return this.request<any>("/producoes-receitas/indicadores" + this.query(params)); }
+  getRankingProducao(params?: Record<string, string | number | boolean | undefined>) { return this.request<any[]>("/producoes-receitas/ranking" + this.query(params)); }
+
+  getInsumos() { return this.request<any>("/estoque/insumos?limit=200"); }
   cadastrarInsumo(body: any) { return this.request<any>("/estoque/insumos", { method: "POST", body: JSON.stringify(body) }); }
   atualizarInsumo(codigo: string, body: any) { return this.request<any>(`/estoque/insumos/${codigo}`, { method: "PATCH", body: JSON.stringify(body) }); }
   excluirInsumo(codigo: string) { return this.request<any>(`/estoque/insumos/${codigo}`, { method: "DELETE" }); }
