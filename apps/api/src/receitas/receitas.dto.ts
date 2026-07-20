@@ -18,6 +18,7 @@ export class EtapaReceitaDto {
 
 export class CriarReceitaDto {
   @IsString() @MinLength(2) nome!: string;
+  @IsString() produtoFinalId!: string;
   @IsOptional() @IsString() categoria?: string;
   @IsOptional() @IsString() descricao?: string;
   @IsOptional() @IsUrl({ require_tld: false }) fotoUrl?: string;
@@ -38,6 +39,7 @@ export class CriarReceitaDto {
 
 export class AtualizarReceitaDto {
   @IsOptional() @IsString() @MinLength(2) nome?: string;
+  @IsOptional() @IsString() produtoFinalId?: string;
   @IsOptional() @IsString() categoria?: string;
   @IsOptional() @IsString() descricao?: string;
   @IsOptional() @IsUrl({ require_tld: false }) fotoUrl?: string;

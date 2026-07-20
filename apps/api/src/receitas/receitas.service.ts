@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, ProducaoReceitaStatus } from "../generated/prisma/client.js";
+import { EntradaOrigem, MovimentacaoTipo, Prisma, ProducaoReceitaStatus } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { AdicionarObservacaoProducaoDto, AtualizarProducaoReceitaDto, AtualizarReceitaDto, CriarProducaoReceitaDto, CriarReceitaDto, InformarPerdaProducaoDto, ItemReceitaDto, ListarProducoesReceitasDto, ListarReceitasDto, RankingProducoesDto } from "./receitas.dto.js";
 
@@ -22,28 +22,29 @@ export class ReceitasService {
       where.OR = [{ nome: { contains: busca, mode: "insensitive" } }, { codigo: { contains: busca, mode: "insensitive" } }, { categoria: { contains: busca, mode: "insensitive" } }];
     }
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.receita.findMany({ where, orderBy: { [dto.ordenarPor]: dto.direcao }, skip: (dto.page - 1) * dto.limit, take: dto.limit, include: { _count: { select: { itens: true, producoes: true } } } }),
+      this.prisma.receita.findMany({ where, orderBy: { [dto.ordenarPor]: dto.direcao }, skip: (dto.page - 1) * dto.limit, take: dto.limit, include: { produtoFinal: { select: { id: true, codigo: true, nome: true, unidade: true, quantidade: true, ativo: true } }, _count: { select: { itens: true, producoes: true } } } }),
       this.prisma.receita.count({ where }),
     ]);
     return { data: data.map(item => this.mapearReceita(item)), meta: { page: dto.page, limit: dto.limit, total, pages: Math.max(1, Math.ceil(total / dto.limit)) } };
   }
 
   async listarAtivas() {
-    const receitas = await this.prisma.receita.findMany({ where: { ativo: true }, select: { id: true, codigo: true, nome: true, categoria: true, rendimento: true, unidadeRendimento: true, tempoPreparoMinutos: true, setorPadrao: true }, orderBy: { nome: "asc" } });
+    const receitas = await this.prisma.receita.findMany({ where: { ativo: true }, select: { id: true, codigo: true, nome: true, categoria: true, rendimento: true, unidadeRendimento: true, tempoPreparoMinutos: true, setorPadrao: true, produtoFinalId: true, produtoFinal: { select: { id: true, codigo: true, nome: true, unidade: true, quantidade: true, ativo: true } } }, orderBy: { nome: "asc" } });
     return receitas.map(receita => ({ ...receita, rendimento: numero(receita.rendimento) }));
   }
 
   async buscar(id: string) {
-    const receita = await this.prisma.receita.findUnique({ where: { id }, include: { itens: { include: { insumo: { select: { codigo: true, nome: true, custoUnitario: true, unidade: true, ativo: true } } }, orderBy: { nome: "asc" } }, _count: { select: { producoes: true } } } });
+    const receita = await this.prisma.receita.findUnique({ where: { id }, include: { produtoFinal: { select: { id: true, codigo: true, nome: true, unidade: true, quantidade: true, ativo: true } }, itens: { include: { insumo: { select: { codigo: true, nome: true, custoUnitario: true, unidade: true, ativo: true } } }, orderBy: { nome: "asc" } }, _count: { select: { producoes: true } } } });
     if (!receita) throw new NotFoundException("Receita não encontrada.");
     return this.mapearReceita(receita);
   }
 
   async criar(dto: CriarReceitaDto) {
+    await this.validarProdutoFinal(dto.produtoFinalId, dto.unidadeRendimento);
     const itens = await this.prepararItens(dto.itens);
     const custoCalculado = itens.reduce((total, item) => total + item.quantidade * (item.custoUnitario ?? 0), 0);
     const receita = await this.prisma.receita.create({ data: {
-      codigo: await this.proximoCodigo(), nome: dto.nome.trim(), categoria: texto(dto.categoria), descricao: texto(dto.descricao), fotoUrl: texto(dto.fotoUrl),
+      codigo: await this.proximoCodigo(), produtoFinalId: dto.produtoFinalId, nome: dto.nome.trim(), categoria: texto(dto.categoria), descricao: texto(dto.descricao), fotoUrl: texto(dto.fotoUrl),
       rendimento: dto.rendimento, unidadeRendimento: dto.unidadeRendimento.trim().toLowerCase(), tempoPreparoMinutos: dto.tempoPreparoMinutos ?? null,
       modoPreparo: texto(dto.modoPreparo), setorPadrao: texto(dto.setorPadrao), instrucoesProducao: texto(dto.instrucoesProducao), equipamentos: texto(dto.equipamentos), responsavelPadrao: texto(dto.responsavelPadrao), etapas: dto.etapas ? JSON.parse(JSON.stringify(dto.etapas)) : undefined,
       custoEstimado: custoCalculado || dto.custoEstimado || null, observacoes: texto(dto.observacoes), ativo: dto.ativo ?? true,
@@ -53,11 +54,12 @@ export class ReceitasService {
   }
 
   async atualizar(id: string, dto: AtualizarReceitaDto) {
-    await this.buscar(id);
+    const atual = await this.buscar(id);
+    if (dto.produtoFinalId !== undefined || dto.unidadeRendimento !== undefined) await this.validarProdutoFinal(dto.produtoFinalId ?? atual.produtoFinalId, dto.unidadeRendimento ?? atual.unidadeRendimento);
     const itens = dto.itens === undefined ? undefined : await this.prepararItens(dto.itens);
     const custoCalculado = itens?.reduce((total, item) => total + item.quantidade * (item.custoUnitario ?? 0), 0);
     const receita = await this.prisma.receita.update({ where: { id }, data: {
-      ...(dto.nome !== undefined ? { nome: dto.nome.trim() } : {}), ...(dto.categoria !== undefined ? { categoria: texto(dto.categoria) } : {}), ...(dto.descricao !== undefined ? { descricao: texto(dto.descricao) } : {}), ...(dto.fotoUrl !== undefined ? { fotoUrl: texto(dto.fotoUrl) } : {}),
+      ...(dto.produtoFinalId !== undefined ? { produtoFinalId: dto.produtoFinalId } : {}), ...(dto.nome !== undefined ? { nome: dto.nome.trim() } : {}), ...(dto.categoria !== undefined ? { categoria: texto(dto.categoria) } : {}), ...(dto.descricao !== undefined ? { descricao: texto(dto.descricao) } : {}), ...(dto.fotoUrl !== undefined ? { fotoUrl: texto(dto.fotoUrl) } : {}),
       ...(dto.rendimento !== undefined ? { rendimento: dto.rendimento } : {}), ...(dto.unidadeRendimento !== undefined ? { unidadeRendimento: dto.unidadeRendimento.trim().toLowerCase() } : {}), ...(dto.tempoPreparoMinutos !== undefined ? { tempoPreparoMinutos: dto.tempoPreparoMinutos } : {}),
       ...(dto.modoPreparo !== undefined ? { modoPreparo: texto(dto.modoPreparo) } : {}), ...(dto.setorPadrao !== undefined ? { setorPadrao: texto(dto.setorPadrao) } : {}), ...(dto.instrucoesProducao !== undefined ? { instrucoesProducao: texto(dto.instrucoesProducao) } : {}), ...(dto.equipamentos !== undefined ? { equipamentos: texto(dto.equipamentos) } : {}), ...(dto.responsavelPadrao !== undefined ? { responsavelPadrao: texto(dto.responsavelPadrao) } : {}), ...(dto.etapas !== undefined ? { etapas: JSON.parse(JSON.stringify(dto.etapas)) } : {}), ...(dto.custoEstimado !== undefined || custoCalculado !== undefined ? { custoEstimado: custoCalculado || dto.custoEstimado || null } : {}), ...(dto.observacoes !== undefined ? { observacoes: texto(dto.observacoes) } : {}), ...(dto.ativo !== undefined ? { ativo: dto.ativo } : {}),
       ...(itens ? { itens: { deleteMany: {}, create: itens } } : {}),
@@ -69,7 +71,7 @@ export class ReceitasService {
     const origem = await this.prisma.receita.findUnique({ where: { id }, include: { itens: true } });
     if (!origem) throw new NotFoundException("Receita não encontrada.");
     const copia = await this.prisma.receita.create({ data: {
-      codigo: await this.proximoCodigo(), nome: `${origem.nome} (cópia)`, categoria: origem.categoria, descricao: origem.descricao, fotoUrl: origem.fotoUrl, rendimento: origem.rendimento, unidadeRendimento: origem.unidadeRendimento, tempoPreparoMinutos: origem.tempoPreparoMinutos, modoPreparo: origem.modoPreparo, setorPadrao: origem.setorPadrao, instrucoesProducao: origem.instrucoesProducao, equipamentos: origem.equipamentos, responsavelPadrao: origem.responsavelPadrao, etapas: origem.etapas ?? undefined, custoEstimado: origem.custoEstimado, observacoes: origem.observacoes, ativo: true,
+      codigo: await this.proximoCodigo(), produtoFinalId: origem.produtoFinalId, nome: `${origem.nome} (cópia)`, categoria: origem.categoria, descricao: origem.descricao, fotoUrl: origem.fotoUrl, rendimento: origem.rendimento, unidadeRendimento: origem.unidadeRendimento, tempoPreparoMinutos: origem.tempoPreparoMinutos, modoPreparo: origem.modoPreparo, setorPadrao: origem.setorPadrao, instrucoesProducao: origem.instrucoesProducao, equipamentos: origem.equipamentos, responsavelPadrao: origem.responsavelPadrao, etapas: origem.etapas ?? undefined, custoEstimado: origem.custoEstimado, observacoes: origem.observacoes, ativo: true,
       itens: { create: origem.itens.map(item => ({ insumoId: item.insumoId, nome: item.nome, quantidade: item.quantidade, unidade: item.unidade, custoUnitario: item.custoUnitario })) },
     }, include: { itens: true, _count: { select: { producoes: true } } } });
     return this.mapearReceita(copia);
@@ -99,23 +101,40 @@ export class ReceitasService {
   }
 
   async criarProducao(dto: CriarProducaoReceitaDto) {
-    await this.validarVinculos(dto.receitaId, dto.funcionarioId); this.validarHorario(dto.horaInicio, dto.horaFim); this.validarEstadoProducao(dto, true);
-    const producao = await this.prisma.producaoReceita.create({ data: this.dadosProducao(dto), include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, tempoPreparoMinutos: true } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
+    await this.validarVinculos(dto.receitaId, dto.funcionarioId);
+    this.validarHorario(dto.horaInicio, dto.horaFim);
+    this.validarEstadoProducao(dto, true);
+    const producao = await this.prisma.$transaction(async tx => {
+      const criada = await tx.producaoReceita.create({ data: this.dadosProducao(dto) });
+      if (dto.status === ProducaoReceitaStatus.CONCLUIDA) await this.processarEstoqueProducao(tx, criada.id);
+      return tx.producaoReceita.findUniqueOrThrow({ where: { id: criada.id }, include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, rendimento: true, unidadeRendimento: true, tempoPreparoMinutos: true, produtoFinalId: true, produtoFinal: { select: { id: true, codigo: true, nome: true, unidade: true, quantidade: true, ativo: true } } } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
+    });
     return this.mapearProducao(producao);
   }
 
   async atualizarProducao(id: string, dto: AtualizarProducaoReceitaDto) {
     const atual = await this.buscarProducao(id);
     if (atual.status === ProducaoReceitaStatus.CANCELADA) throw new BadRequestException("Produções canceladas são preservadas e não podem ser alteradas.");
-    const receitaId = dto.receitaId ?? atual.receitaId; const funcionarioId = dto.funcionarioId ?? atual.funcionarioId;
-    await this.validarVinculos(receitaId, funcionarioId); this.validarHorario(dto.horaInicio ?? atual.horaInicio ?? undefined, dto.horaFim ?? atual.horaFim ?? undefined); this.validarEstadoProducao({ ...dto, receitaId, funcionarioId, horaFim: dto.horaFim ?? atual.horaFim ?? undefined, quantidadeProduzida: dto.quantidadeProduzida ?? atual.quantidadeProduzida }, false);
-    const producao = await this.prisma.producaoReceita.update({ where: { id }, data: this.dadosProducao(dto), include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, tempoPreparoMinutos: true } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
+    const alteraEstoque = dto.receitaId !== undefined || dto.quantidadeProduzida !== undefined || dto.quantidadePerdida !== undefined || dto.unidade !== undefined;
+    if (atual.estoqueProcessadoEm && alteraEstoque) throw new BadRequestException("O estoque desta produção já foi processado. Faça correções por ajuste de estoque.");
+    const receitaId = dto.receitaId ?? atual.receitaId;
+    const funcionarioId = dto.funcionarioId ?? atual.funcionarioId;
+    await this.validarVinculos(receitaId, funcionarioId);
+    this.validarHorario(dto.horaInicio ?? atual.horaInicio ?? undefined, dto.horaFim ?? atual.horaFim ?? undefined);
+    this.validarEstadoProducao({ ...dto, receitaId, funcionarioId, horaFim: dto.horaFim ?? atual.horaFim ?? undefined, quantidadeProduzida: dto.quantidadeProduzida ?? atual.quantidadeProduzida }, false);
+    const deveProcessarEstoque = dto.status === ProducaoReceitaStatus.CONCLUIDA && !atual.estoqueProcessadoEm;
+    const producao = await this.prisma.$transaction(async tx => {
+      await tx.producaoReceita.update({ where: { id }, data: this.dadosProducao(dto) });
+      if (deveProcessarEstoque) await this.processarEstoqueProducao(tx, id);
+      return tx.producaoReceita.findUniqueOrThrow({ where: { id }, include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, rendimento: true, unidadeRendimento: true, tempoPreparoMinutos: true, produtoFinalId: true, produtoFinal: { select: { id: true, codigo: true, nome: true, unidade: true, quantidade: true, ativo: true } } } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
+    });
     return this.mapearProducao(producao);
   }
 
   async cancelarProducao(id: string, motivo: string) {
     const atual = await this.buscarProducao(id);
     if (atual.status === ProducaoReceitaStatus.CANCELADA) throw new BadRequestException("Esta produção já está cancelada.");
+    if (atual.estoqueProcessadoEm) throw new BadRequestException("Esta produção já movimentou o estoque e não pode ser cancelada. Use um ajuste de estoque.");
     const producao = await this.prisma.producaoReceita.update({ where: { id }, data: { status: ProducaoReceitaStatus.CANCELADA, canceladaEm: new Date(), motivoCancelamento: motivo.trim() }, include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, tempoPreparoMinutos: true } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
     return this.mapearProducao(producao);
   }
@@ -134,7 +153,8 @@ export class ReceitasService {
 
   async informarPerda(id: string, dto: InformarPerdaProducaoDto) {
     const atual = await this.buscarProducao(id);
-    if (atual.status === ProducaoReceitaStatus.CANCELADA) throw new BadRequestException("Produ??es canceladas não podem receber perdas.");
+    if (atual.status === ProducaoReceitaStatus.CANCELADA) throw new BadRequestException("Produções canceladas não podem receber perdas.");
+    if (atual.estoqueProcessadoEm) throw new BadRequestException("A perda não pode ser alterada depois que o produto final entrou no estoque.");
     if (dto.quantidadePerdida > atual.quantidadeProduzida) throw new BadRequestException("A perda não pode ser maior que a quantidade produzida.");
     const producao = await this.prisma.producaoReceita.update({ where: { id }, data: { quantidadePerdida: dto.quantidadePerdida, motivoPerda: dto.motivo.trim() }, include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, tempoPreparoMinutos: true } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
     return this.mapearProducao(producao);
@@ -142,7 +162,7 @@ export class ReceitasService {
 
   async adicionarObservacao(id: string, observacao: string) {
     const atual = await this.buscarProducao(id);
-    if (atual.status === ProducaoReceitaStatus.CANCELADA) throw new BadRequestException("Produ??es canceladas não podem receber observações.");
+    if (atual.status === ProducaoReceitaStatus.CANCELADA) throw new BadRequestException("Produções canceladas não podem receber observações.");
     const textoNovo = observacao.trim();
     const observacoes = [atual.observacoes, new Date().toLocaleString("pt-BR") + ": " + textoNovo].filter(Boolean).join("\n");
     const producao = await this.prisma.producaoReceita.update({ where: { id }, data: { observacoes }, include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, tempoPreparoMinutos: true } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
@@ -215,6 +235,60 @@ export class ReceitasService {
     return itens.map(item => { const insumo = item.insumoId ? porId.get(item.insumoId) : undefined; if (item.insumoId && !insumo) throw new BadRequestException("Um dos ingredientes selecionados não existe mais no estoque."); return { insumoId: item.insumoId || null, nome: (item.nome || insumo?.nome || "").trim(), quantidade: item.quantidade, unidade: (item.unidade || insumo?.unidade || "").trim().toLowerCase(), custoUnitario: item.custoUnitario ?? (insumo ? numero(insumo.custoUnitario) : null) }; });
   }
 
+  private async processarEstoqueProducao(tx: Prisma.TransactionClient, producaoId: string) {
+    const producao = await tx.producaoReceita.findUnique({
+      where: { id: producaoId },
+      include: { receita: { include: { produtoFinal: true, itens: true } } },
+    });
+    if (!producao) throw new NotFoundException("Produção não encontrada.");
+    if (producao.estoqueProcessadoEm) return;
+    const receita = producao.receita;
+    const produtoFinal = receita.produtoFinal;
+    if (!produtoFinal?.ativo) throw new BadRequestException("Vincule a receita a um produto final ativo no estoque antes de concluir.");
+    if (produtoFinal.unidade.trim().toLowerCase() !== producao.unidade.trim().toLowerCase()) throw new BadRequestException("A unidade produzida deve ser igual à unidade do produto final no estoque: " + produtoFinal.unidade + ".");
+    const quantidadeProduzida = numero(producao.quantidadeProduzida);
+    const quantidadePerdida = numero(producao.quantidadePerdida);
+    const quantidadeLiquida = Number(Math.max(0, quantidadeProduzida - quantidadePerdida).toFixed(3));
+    const rendimentoBase = numero(receita.rendimento);
+    if (rendimentoBase <= 0) throw new BadRequestException("O rendimento da receita precisa ser maior que zero.");
+    const fator = quantidadeProduzida / rendimentoBase;
+    const consumos = new Map<string, number>();
+    for (const item of receita.itens) {
+      if (!item.insumoId) continue;
+      const quantidade = Number((numero(item.quantidade) * fator).toFixed(3));
+      consumos.set(item.insumoId, Number(((consumos.get(item.insumoId) ?? 0) + quantidade).toFixed(3)));
+    }
+    let custoLote = 0;
+    for (const [insumoId, quantidade] of consumos) {
+      if (quantidade <= 0) continue;
+      const insumo = await tx.insumo.findUnique({ where: { id: insumoId } });
+      if (!insumo?.ativo) throw new BadRequestException("Um ingrediente vinculado à receita não está ativo no estoque.");
+      const atualizado = await tx.insumo.updateMany({ where: { id: insumoId, quantidade: { gte: quantidade } }, data: { quantidade: { decrement: quantidade } } });
+      if (!atualizado.count) throw new BadRequestException("Estoque insuficiente de " + insumo.nome + " para concluir esta produção.");
+      const saldoAnterior = numero(insumo.quantidade);
+      const saldoPosterior = Number((saldoAnterior - quantidade).toFixed(3));
+      custoLote += quantidade * numero(insumo.custoUnitario);
+      await tx.movimentacao.create({ data: { insumoId, tipo: MovimentacaoTipo.PRODUCAO, origem: EntradaOrigem.PRODUCAO, quantidade: -quantidade, saldoAnterior, saldoPosterior, custoUnitario: insumo.custoUnitario, referenciaId: producao.id, descricao: "Consumo na produção " + receita.codigo + " → " + receita.nome } });
+    }
+    if (quantidadeLiquida > 0) {
+      const destinoAtual = await tx.insumo.findUniqueOrThrow({ where: { id: produtoFinal.id } });
+      const saldoAnterior = numero(destinoAtual.quantidade);
+      const saldoPosterior = Number((saldoAnterior + quantidadeLiquida).toFixed(3));
+      const custoProducaoUnitario = custoLote > 0 ? custoLote / quantidadeLiquida : numero(destinoAtual.custoUnitario);
+      const custoMedio = saldoPosterior > 0 ? ((saldoAnterior * numero(destinoAtual.custoUnitario)) + custoLote) / saldoPosterior : custoProducaoUnitario;
+      await tx.insumo.update({ where: { id: produtoFinal.id }, data: { quantidade: { increment: quantidadeLiquida }, custoUnitario: custoMedio } });
+      await tx.movimentacao.create({ data: { insumoId: produtoFinal.id, tipo: MovimentacaoTipo.PRODUCAO, origem: EntradaOrigem.PRODUCAO, quantidade: quantidadeLiquida, saldoAnterior, saldoPosterior, custoUnitario: custoProducaoUnitario, referenciaId: producao.id, descricao: "Entrada do produto final da produção " + receita.codigo + " → " + receita.nome } });
+    }
+    await tx.producaoReceita.update({ where: { id: producao.id }, data: { estoqueProcessadoEm: new Date() } });
+  }
+
+  private async validarProdutoFinal(produtoFinalId: string | undefined, unidadeRendimento: string) {
+    if (!produtoFinalId) throw new BadRequestException("Selecione o produto final vinculado ao estoque.");
+    const produto = await this.prisma.insumo.findUnique({ where: { id: produtoFinalId }, select: { id: true, nome: true, unidade: true, ativo: true } });
+    if (!produto?.ativo) throw new BadRequestException("O produto final selecionado não está ativo no estoque.");
+    if (produto.unidade.trim().toLowerCase() !== unidadeRendimento.trim().toLowerCase()) throw new BadRequestException("A unidade do rendimento deve ser " + produto.unidade + ", igual ao produto final no estoque.");
+  }
+
   private async validarVinculos(receitaId: string, funcionarioId: string) {
     const [receita, funcionario] = await this.prisma.$transaction([this.prisma.receita.findUnique({ where: { id: receitaId }, select: { id: true, ativo: true } }), this.prisma.funcionario.findUnique({ where: { id: funcionarioId }, select: { id: true, ativo: true } })]);
     if (!receita?.ativo) throw new BadRequestException("Selecione uma receita ativa para registrar a produção."); if (!funcionario?.ativo) throw new BadRequestException("Selecione um funcionário ativo para registrar a produção.");
@@ -233,7 +307,7 @@ export class ReceitasService {
 
   private validarHorario(inicio?: string | Date, fim?: string | Date) { if (inicio && fim && new Date(fim) < new Date(inicio)) throw new BadRequestException("O horário de término não pode ser anterior ao início."); }
   private async proximoCodigo() { for (let tentativa = 0; tentativa < 5; tentativa++) { const codigo = `REC-${Date.now().toString(36).toUpperCase()}${tentativa ? `-${tentativa}` : ""}`; if (!await this.prisma.receita.findUnique({ where: { codigo }, select: { id: true } })) return codigo; } throw new ConflictException("Não foi possível gerar um código único para a receita."); }
-  private mapearReceita(receita: any) { return { ...receita, rendimento: numero(receita.rendimento), custoEstimado: receita.custoEstimado == null ? null : numero(receita.custoEstimado), itens: receita.itens?.map((item: any) => ({ ...item, quantidade: numero(item.quantidade), custoUnitario: item.custoUnitario == null ? null : numero(item.custoUnitario), insumo: item.insumo ? { ...item.insumo, custoUnitario: numero(item.insumo.custoUnitario) } : null })) }; }
+  private mapearReceita(receita: any) { return { ...receita, rendimento: numero(receita.rendimento), produtoFinal: receita.produtoFinal ? { ...receita.produtoFinal, quantidade: numero(receita.produtoFinal.quantidade) } : null, custoEstimado: receita.custoEstimado == null ? null : numero(receita.custoEstimado), itens: receita.itens?.map((item: any) => ({ ...item, quantidade: numero(item.quantidade), custoUnitario: item.custoUnitario == null ? null : numero(item.custoUnitario), insumo: item.insumo ? { ...item.insumo, custoUnitario: numero(item.insumo.custoUnitario) } : null })) }; }
   private mapearProducao(producao: any) { const tempoTotalMinutos = this.duracao(producao.horaInicio, producao.horaFim); return { ...producao, quantidadeProduzida: numero(producao.quantidadeProduzida), quantidadePerdida: numero(producao.quantidadePerdida), setor: producao.setor || producao.funcionario?.setor || "Produção geral", tempoTotalMinutos, atrasada: tempoTotalMinutos !== null && producao.receita?.tempoPreparoMinutos != null && tempoTotalMinutos > producao.receita.tempoPreparoMinutos }; }
   private duracao(inicio?: Date | null, fim?: Date | null) { return inicio && fim ? Math.max(0, Math.round((fim.getTime() - inicio.getTime()) / 60000)) : null; }
   private agrupar<T>(itens: T[], chave: (item: T) => string) { return itens.reduce((grupos, item) => { const id = chave(item); grupos.set(id, [...(grupos.get(id) ?? []), item]); return grupos; }, new Map<string, T[]>()); }

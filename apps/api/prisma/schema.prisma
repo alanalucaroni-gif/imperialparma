@@ -75,6 +75,7 @@ enum EntradaOrigem {
   XML
   PEDIDO_COMPRA
   AJUSTE
+  PRODUCAO
 }
 
 model Usuario {
@@ -146,6 +147,7 @@ model Insumo {
   notasItens    NotaFiscalItem[]
   pedidoItens   PedidoCompraItem[]
   itensReceita  ItemReceita[]
+  receitasProdutoFinal Receita[] @relation("ProdutoFinalReceita")
   criadoEm      DateTime       @default(now())
   atualizadoEm  DateTime       @updatedAt
   @@index([nome])
@@ -320,6 +322,8 @@ model Receita {
   equipamentos        String?
   responsavelPadrao   String?
   etapas              Json?
+  produtoFinalId      String?
+  produtoFinal        Insumo?           @relation("ProdutoFinalReceita", fields: [produtoFinalId], references: [id], onDelete: SetNull)
   ativo               Boolean           @default(true)
   itens               ItemReceita[]
   producoes           ProducaoReceita[]
@@ -328,6 +332,7 @@ model Receita {
 
   @@index([nome])
   @@index([categoria, ativo])
+  @@index([produtoFinalId])
   @@map("receitas")
 }
 
@@ -368,6 +373,7 @@ model ProducaoReceita {
   observacoes          String?
   canceladaEm          DateTime?
   motivoCancelamento   String?
+  estoqueProcessadoEm  DateTime?
   criadoEm             DateTime              @default(now())
   atualizadoEm         DateTime              @updatedAt
 
