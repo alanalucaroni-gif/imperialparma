@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ImperialERP from "./ImperialERP.jsx";
+import CotacaoFornecedorPublica from "./CotacaoFornecedorPublica.jsx";
 import { api } from "./api";
 import "./styles.css";
 
@@ -101,8 +102,10 @@ function AuthGate() {
   );
 }
 
+const cotacaoPublica = window.location.pathname.match(/^\/cotacao\/([^/]+)\/?$/);
+
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <AuthGate />
+    {cotacaoPublica ? <CotacaoFornecedorPublica token={decodeURIComponent(cotacaoPublica[1])} /> : <AuthGate />}
   </React.StrictMode>,
 );

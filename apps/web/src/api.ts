@@ -147,6 +147,26 @@ class ImperialApi {
   registrarMovimentacaoEstoque(body: any) { return this.request<any>("/estoque/movimentacoes", { method: "POST", body: JSON.stringify(body) }); }
   atualizarEstoqueMinimo(codigo: string, minimo: number) { return this.request<any>(`/estoque/insumos/${codigo}/minimo`, { method: "PATCH", body: JSON.stringify({ minimo }) }); }
   getPainelCotacoes() { return this.request<any>("/cotacoes/painel"); }
+  getCotacao(codigo: string) { return this.request<any>(`/cotacoes/${codigo}`); }
+  getCotacaoPublica(token: string) { return this.request<any>(`/cotacoes-publicas/${token}`); }
+  salvarRascunhoCotacaoPublica(token: string, body: any) { return this.request<any>(`/cotacoes-publicas/${token}/rascunho`, { method: "PATCH", body: JSON.stringify(body) }); }
+  enviarCotacaoPublica(token: string, body: any) { return this.request<any>(`/cotacoes-publicas/${token}/enviar`, { method: "POST", body: JSON.stringify(body) }); }
+  recusarCotacaoPublica(token: string, body: any) { return this.request<any>(`/cotacoes-publicas/${token}/recusar`, { method: "POST", body: JSON.stringify(body) }); }
+  finalizarCotacao(codigo: string, body: any) { return this.request<any>(`/cotacoes/${codigo}/finalizar`, { method: "POST", body: JSON.stringify(body) }); }
+  prorrogarCotacao(codigo: string, prazoResposta: string) { return this.request<any>(`/cotacoes/${codigo}/prorrogar`, { method: "POST", body: JSON.stringify({ prazoResposta }) }); }
+  encerrarCotacao(codigo: string, motivo?: string) { return this.request<any>(`/cotacoes/${codigo}/encerrar`, { method: "POST", body: JSON.stringify({ motivo }) }); }
+  gerarNovoLinkCotacao(codigo: string, participacaoId: string) { return this.request<any>(`/cotacoes/${codigo}/fornecedores/${participacaoId}/novo-link`, { method: "POST" }); }
+  getPedidosCompra() { return this.request<any>("/cotacoes/pedidos/lista"); }
+  getRecebimentosCompra() { return this.request<any>("/compras/recebimentos"); }
+  criarRecebimentoCompra(pedidoId: string, body: any) { return this.request<any>(`/compras/pedidos/${pedidoId}/recebimentos`, { method: "POST", body: JSON.stringify(body) }); }
+  confirmarEntradaRecebimento(id: string) { return this.request<any>(`/compras/recebimentos/${id}/confirmar-estoque`, { method: "POST" }); }
+  cancelarPedidoCompra(id: string, motivo: string) { return this.request<any>(`/compras/pedidos/${id}/cancelar`, { method: "POST", body: JSON.stringify({ motivo }) }); }
+  getHistoricoPrecosCompra() { return this.request<any>("/compras/historico-precos"); }
+  async baixarPdfPedido(id: string) {
+    const response = await fetch(`${API_URL}/cotacoes/pedidos/${id}/pdf`, { headers: this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {} });
+    if (!response.ok) throw new Error("Nao foi possivel abrir o PDF do pedido.");
+    return response.blob();
+  }
   getFornecedoresCotacao() { return this.request<any>("/cotacoes/fornecedores/ativos"); }
   cadastrarFornecedorCotacao(body: any) { return this.request<any>("/cotacoes/fornecedores", { method: "POST", body: JSON.stringify(body) }); }
   criarCotacaoInteligente(body: any) { return this.request<any>("/cotacoes", { method: "POST", body: JSON.stringify(body) }); }

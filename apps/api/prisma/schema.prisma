@@ -56,17 +56,52 @@ enum ProducaoReceitaStatus {
 }
 
 enum CompraStatus {
+  GERADO
+  ENVIADO
+  CONFIRMADO
+  AGUARDANDO_ENTREGA
   PENDENTE
   PARCIAL
+  RECEBIDO_PARCIALMENTE
   RECEBIDO
+  DIVERGENTE
   CANCELADO
 }
 
 enum CotacaoStatus {
+  RASCUNHO
   AGUARDANDO
+  ENVIADA
   RESPONDIDA
+  EM_ANALISE
+  FINALIZADA
+  VENCIDA
   ENCERRADA
   CANCELADA
+}
+
+enum ParticipacaoCotacaoStatus {
+  LINK_NAO_ENVIADO
+  ENVIADO
+  LINK_ACESSADO
+  FORMULARIO_INICIADO
+  RASCUNHO_SALVO
+  RESPONDIDO
+  RESPOSTA_ALTERADA
+  VENCIDO
+  RECUSADO
+  CANCELADO
+}
+
+enum RecebimentoItemStatus {
+  PENDENTE
+  RECEBIDO_CORRETAMENTE
+  RECEBIDO_PARCIALMENTE
+  PRODUTO_DIVERGENTE
+  QUANTIDADE_DIVERGENTE
+  VALOR_DIVERGENTE
+  PRODUTO_RECUSADO
+  PRODUTO_AVARIADO
 }
 
 enum EntradaOrigem {
@@ -148,6 +183,13 @@ model Insumo {
   pedidoItens   PedidoCompraItem[]
   itensReceita  ItemReceita[]
   receitasProdutoFinal Receita[] @relation("ProdutoFinalReceita")
+  cotacaoItens          CotacaoItem[]
+  recebimentoItens     RecebimentoCompraItem[]
+  historicoPrecos      HistoricoPrecoCompra[]
+  ultimoFornecedorId  String?
+  ultimoFornecedor    Fornecedor?              @relation("UltimoFornecedorInsumo", fields: [ultimoFornecedorId], references: [id], onDelete: SetNull)
+  ultimaCompraEm       DateTime?
+  ultimoCustoCompra    Decimal?                 @db.Decimal(14, 4)
   criadoEm      DateTime       @default(now())
   atualizadoEm  DateTime       @updatedAt
   @@index([nome])
@@ -198,6 +240,9 @@ model Fornecedor {
   comprasManuais CompraManual[]
   entradasBoleto EntradaBoleto[]
   notasFiscais   NotaFiscalXml[]
+  ultimoFornecedorDe Insumo[]              @relation("UltimoFornecedorInsumo")
+  recebimentos        RecebimentoCompra[]
+  historicoPrecos     HistoricoPrecoCompra[]
   criadoEm       DateTime            @default(now())
   atualizadoEm   DateTime            @updatedAt
   @@index([nome])
@@ -406,63 +451,270 @@ model PedidoItem {
 }
 
 model PedidoCompra {
-  id           String             @id @default(cuid())
-  codigo       String             @unique
-  fornecedorId String
-  fornecedor   Fornecedor         @relation(fields: [fornecedorId], references: [id])
-  status       CompraStatus       @default(PENDENTE)
-  valorTotal   Decimal            @db.Decimal(14, 2)
-  itens        PedidoCompraItem[]
-  criadoEm     DateTime           @default(now())
-  atualizadoEm DateTime           @updatedAt
+  id                  String              @id @default(cuid())
+  codigo              String              @unique
+  cotacaoId           String?
+  cotacao             Cotacao?            @relation(fields: [cotacaoId], references: [id], onDelete: SetNull)
+  fornecedorId        String
+  fornecedor          Fornecedor          @relation(fields: [fornecedorId], references: [id])
+  status              CompraStatus        @default(GERADO)
+  valorTotal          Decimal             @db.Decimal(14, 2)
+  frete               Decimal             @default(0) @db.Decimal(14, 2)
+  desconto            Decimal             @default(0) @db.Decimal(14, 2)
+  condicaoPagamento   String?
+  formaPagamento      String?
+  dataPrevistaEntrega DateTime?
+  responsavelCompra   String?
+  observacoes         String?
+  finalizadoEm        DateTime?
+  recebidoEm          DateTime?
+  canceladoEm         DateTime?
+  motivoCancelamento  String?
+  pdfArquivo          Bytes?
+  pdfNome             String?
+  pdfGeradoEm         DateTime?
+  itens               PedidoCompraItem[]
+  recebimentos        RecebimentoCompra[]
+  criadoEm            DateTime            @default(now())
+  atualizadoEm        DateTime            @updatedAt
+
+  @@index([cotacaoId])
+  @@index([fornecedorId, status])
 }
 
 model PedidoCompraItem {
-  id             String       @id @default(cuid())
+  id             String                  @id @default(cuid())
   pedidoCompraId String
-  pedidoCompra   PedidoCompra @relation(fields: [pedidoCompraId], references: [id], onDelete: Cascade)
+  pedidoCompra   PedidoCompra            @relation(fields: [pedidoCompraId], references: [id], onDelete: Cascade)
   insumoId       String
-  insumo         Insumo       @relation(fields: [insumoId], references: [id])
-  quantidade     Decimal      @db.Decimal(14, 3)
-  custoUnitario  Decimal      @db.Decimal(14, 4)
+  insumo         Insumo                  @relation(fields: [insumoId], references: [id])
+  quantidade     Decimal                 @db.Decimal(14, 3)
+  unidade        String?
+  custoUnitario  Decimal                 @db.Decimal(14, 4)
+  marca          String?
+  embalagem      String?
+  desconto       Decimal                 @default(0) @db.Decimal(14, 2)
+  observacoes    String?
+  recebimentos   RecebimentoCompraItem[]
+
+  @@index([pedidoCompraId])
+  @@index([insumoId])
 }
 
 model Cotacao {
-  id           String               @id @default(cuid())
-  codigo       String               @unique
-  descricao    String
-  quantidade   Decimal              @db.Decimal(14, 3)
-  unidade      String
-  insumoCodigo String?
-  estoqueAtual Decimal?             @db.Decimal(14, 3)
-  estoqueMinimo Decimal?            @db.Decimal(14, 3)
-  saldoCaixa   Decimal?             @db.Decimal(14, 2)
-  status       CotacaoStatus        @default(AGUARDANDO)
-  propostas    CotacaoFornecedor[]
-  criadoEm     DateTime             @default(now())
-  atualizadoEm DateTime             @updatedAt
+  id                String              @id @default(cuid())
+  codigo            String              @unique
+  descricao         String
+  quantidade        Decimal             @db.Decimal(14, 3)
+  unidade           String
+  insumoCodigo      String?
+  estoqueAtual      Decimal?            @db.Decimal(14, 3)
+  estoqueMinimo     Decimal?            @db.Decimal(14, 3)
+  saldoCaixa        Decimal?            @db.Decimal(14, 2)
+  status            CotacaoStatus       @default(AGUARDANDO)
+  prazoResposta     DateTime?
+  observacoes       String?
+  finalizadaEm      DateTime?
+  finalizadaPorId   String?
+  motivoFinalizacao String?
+  economiaTotal     Decimal?            @db.Decimal(14, 2)
+  itens             CotacaoItem[]
+  propostas         CotacaoFornecedor[]
+  pedidos           PedidoCompra[]
+  criadoEm          DateTime            @default(now())
+  atualizadoEm      DateTime            @updatedAt
+
+  @@index([status, prazoResposta])
+}
+
+model CotacaoItem {
+  id                   String                @id @default(cuid())
+  cotacaoId            String
+  cotacao              Cotacao               @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  insumoId             String
+  insumo               Insumo                @relation(fields: [insumoId], references: [id])
+  quantidadeSolicitada Decimal               @db.Decimal(14, 3)
+  unidade              String
+  marcaPreferencial    String?
+  embalagemSolicitada  String?
+  observacoes          String?
+  dataDesejadaEntrega  DateTime?
+  ultimoPreco          Decimal?              @db.Decimal(14, 4)
+  propostas            CotacaoItemProposta[]
+  criadoEm             DateTime              @default(now())
+
+  @@unique([cotacaoId, insumoId])
+  @@index([insumoId])
 }
 
 model CotacaoFornecedor {
-  id           String     @id @default(cuid())
-  cotacaoId    String
-  cotacao      Cotacao    @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
-  fornecedorId String
-  fornecedor   Fornecedor @relation(fields: [fornecedorId], references: [id])
-  precoUnitario Decimal?  @db.Decimal(14, 4)
-  prazoDias    Int?
-  frete        Decimal?   @db.Decimal(14, 2)
-  condicoes    String?
-  formaPagamento String?
-  impostoIncluso Boolean?
-  origemResposta String?
-  whatsappMensagemId String?  @unique
-  enviadaEm     DateTime?
-  respondidaEm  DateTime?
-  respostaOriginal String?
-  selecionada   Boolean     @default(false)
+  id                  String                    @id @default(cuid())
+  cotacaoId           String
+  cotacao             Cotacao                   @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  fornecedorId        String
+  fornecedor          Fornecedor                @relation(fields: [fornecedorId], references: [id])
+  status              ParticipacaoCotacaoStatus @default(LINK_NAO_ENVIADO)
+  tokenPublico        String?                   @unique
+  tokenValidoAte      DateTime?
+  tokenCanceladoEm    DateTime?
+  precoUnitario       Decimal?                  @db.Decimal(14, 4)
+  prazoDias           Int?
+  frete               Decimal?                  @db.Decimal(14, 2)
+  desconto            Decimal?                  @db.Decimal(14, 2)
+  condicoes           String?
+  formaPagamento      String?
+  prazoPagamento      Int?
+  validadeProposta    DateTime?
+  impostoIncluso      Boolean?
+  responsavelNome     String?
+  responsavelTelefone String?
+  observacoesGerais   String?
+  anexos              Json?
+  origemResposta      String?
+  whatsappMensagemId  String?                   @unique
+  numeroWhatsappEnvio String?
+  enviadaEm           DateTime?
+  acessadaEm          DateTime?
+  iniciadaEm          DateTime?
+  rascunhoEm          DateTime?
+  respondidaEm        DateTime?
+  respostaOriginal    String?
+  ipResposta          String?
+  versao              Int                       @default(1)
+  bloqueada           Boolean                   @default(false)
+  recusadaEm          DateTime?
+  motivoRecusa        String?
+  detalheRecusa       String?
+  selecionada         Boolean                   @default(false)
+  itens               CotacaoItemProposta[]
+  acessos             CotacaoAcesso[]
+
   @@unique([cotacaoId, fornecedorId])
+  @@index([status, tokenValidoAte])
 }
+
+model CotacaoItemProposta {
+  id                  String            @id @default(cuid())
+  participacaoId      String
+  participacao        CotacaoFornecedor @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
+  cotacaoItemId       String
+  cotacaoItem         CotacaoItem       @relation(fields: [cotacaoItemId], references: [id], onDelete: Cascade)
+  disponivel          Boolean           @default(true)
+  precoUnitario       Decimal?          @db.Decimal(14, 4)
+  marcaOferecida      String?
+  embalagem           String?
+  quantidadeEmbalagem Decimal?          @db.Decimal(14, 3)
+  quantidadeMinima    Decimal?          @db.Decimal(14, 3)
+  prazoDias           Int?
+  dataPrevistaEntrega DateTime?
+  observacoes         String?
+  valorTotal          Decimal?          @db.Decimal(14, 2)
+  selecionada         Boolean           @default(false)
+  atualizadoEm        DateTime          @updatedAt
+
+  @@unique([participacaoId, cotacaoItemId])
+  @@index([cotacaoItemId])
+}
+
+model CotacaoAcesso {
+  id             String            @id @default(cuid())
+  participacaoId String
+  participacao   CotacaoFornecedor @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
+  ip             String?
+  userAgent      String?
+  criadoEm       DateTime          @default(now())
+
+  @@index([participacaoId, criadoEm])
+}
+
+model RecebimentoCompra {
+  id                     String                  @id @default(cuid())
+  pedidoCompraId         String
+  pedidoCompra           PedidoCompra            @relation(fields: [pedidoCompraId], references: [id], onDelete: Restrict)
+  fornecedorId           String
+  fornecedor             Fornecedor              @relation(fields: [fornecedorId], references: [id])
+  numeroNotaFiscal       String?
+  serieNotaFiscal        String?
+  chaveAcesso            String?                 @unique
+  dataEmissao            DateTime?
+  dataEntrada            DateTime?
+  valorProdutos          Decimal?                @db.Decimal(14, 2)
+  frete                  Decimal?                @db.Decimal(14, 2)
+  desconto               Decimal?                @db.Decimal(14, 2)
+  impostos               Decimal?                @db.Decimal(14, 2)
+  valorTotal             Decimal?                @db.Decimal(14, 2)
+  anexosNota             Json?
+  observacoes            String?
+  status                 CompraStatus            @default(PENDENTE)
+  estoqueConfirmadoEm    DateTime?
+  estoqueConfirmadoPorId String?
+  criadoPorId            String?
+  itens                  RecebimentoCompraItem[]
+  criadoEm               DateTime                @default(now())
+  atualizadoEm           DateTime                @updatedAt
+
+  @@index([pedidoCompraId, status])
+}
+
+model RecebimentoCompraItem {
+  id                    String                @id @default(cuid())
+  recebimentoId         String
+  recebimento           RecebimentoCompra     @relation(fields: [recebimentoId], references: [id], onDelete: Cascade)
+  pedidoCompraItemId    String
+  pedidoCompraItem      PedidoCompraItem      @relation(fields: [pedidoCompraItemId], references: [id])
+  insumoId              String
+  insumo                Insumo                @relation(fields: [insumoId], references: [id])
+  quantidadePedida      Decimal               @db.Decimal(14, 3)
+  quantidadeRecebida    Decimal               @db.Decimal(14, 3)
+  quantidadeRecusada    Decimal               @default(0) @db.Decimal(14, 3)
+  fatorConversaoEstoque Decimal               @default(1) @db.Decimal(14, 4)
+  unidade               String
+  lote                  String?
+  dataFabricacao        DateTime?
+  dataValidade          DateTime?
+  valorUnitarioRecebido Decimal               @db.Decimal(14, 4)
+  marcaRecebida         String?
+  situacao              RecebimentoItemStatus @default(PENDENTE)
+  observacoes           String?
+
+  @@index([recebimentoId])
+  @@index([insumoId])
+}
+
+model HistoricoPrecoCompra {
+  id               String     @id @default(cuid())
+  insumoId         String
+  insumo           Insumo     @relation(fields: [insumoId], references: [id])
+  fornecedorId     String
+  fornecedor       Fornecedor @relation(fields: [fornecedorId], references: [id])
+  quantidade       Decimal    @db.Decimal(14, 3)
+  unidade          String
+  precoUnitario    Decimal    @db.Decimal(14, 4)
+  frete            Decimal    @default(0) @db.Decimal(14, 2)
+  desconto         Decimal    @default(0) @db.Decimal(14, 2)
+  custoFinal       Decimal    @db.Decimal(14, 4)
+  cotacaoCodigo    String?
+  pedidoCodigo     String?
+  notaFiscalNumero String?
+  usuarioId        String?
+  criadoEm         DateTime   @default(now())
+
+  @@index([insumoId, criadoEm])
+  @@index([fornecedorId, criadoEm])
+}
+
+model CompraAuditoria {
+  id         String   @id @default(cuid())
+  entidade   String
+  entidadeId String
+  acao       String
+  usuarioId  String?
+  detalhes   Json?
+  criadoEm   DateTime @default(now())
+
+  @@index([entidade, entidadeId, criadoEm])
+}
+
 model CredencialIntegracao {
   id             String    @id @default(cuid())
   plataforma     String    @unique

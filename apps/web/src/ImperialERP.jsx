@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { api } from "./api";
 import CadastroPessoas from "./CadastroPessoas.jsx";
 import ReceitasProducao from "./ReceitasProducao.jsx";
+import ComprasCotacoes from "./ComprasCotacoes.jsx";
 import {
   LayoutDashboard, Package, FlaskConical, ChefHat, ShoppingCart,
   Truck, Users, UserCircle2, Wallet, BarChart3, Settings, Plug,
@@ -10192,101 +10193,17 @@ function PainelReposicaoCompras({ estoqueItens }) {
   );
 }
 function Compras({ estoqueItens, apiStatus, onAtualizarMinimo, onRegistrarCompraManual, historicoManual, onRegistrarBoleto, historicoBoleto, onRegistrarXml, historicoXml }) {
-  const [tab, setTab] = useState("pedidos");
-  const statusTone = { recebido: "green", parcial: "brand", pendente: "amber", cancelado: "red" };
-  const statusLabel = { recebido: "Recebido", parcial: "Recebimento parcial", pendente: "Pendente", cancelado: "Cancelado" };
-  const statusIcon = { recebido: PackageCheck, parcial: Truck, pendente: Clock, cancelado: XCircle };
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Compras</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">R$ 15.300,00 em pedidos abertos com fornecedores</p>
-        </div>
-        {tab === "pedidos" && (
-          <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
-            <Plus size={15} /> Novo pedido de compra
-          </button>
-        )}
-      </div>
-
-      <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-700/40 rounded-xl p-1 w-fit overflow-x-auto">
-        <button onClick={() => setTab("pedidos")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "pedidos" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Pedidos de compra</button>
-        <button onClick={() => setTab("cotacoes")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap", tab === "cotacoes" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>
-          Cotações
-          <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-full px-1.5 py-0.5">{estoqueItens.filter(item => Number(item.min) > 0 && Number(item.qtd) <= Number(item.min)).length}</span>
-        </button>
-        <button onClick={() => setTab("manual")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "manual" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Compra manual</button>
-        <button onClick={() => setTab("boleto")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "boleto" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Entrada por boleto</button>
-        <button onClick={() => setTab("xml")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5", tab === "xml" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>
-          <FileCode2 size={13} /> Entrada por XML
-        </button>
-      </div>
-
-      {tab === "cotacoes" && <CotacoesInteligentes estoqueItens={estoqueItens} apiStatus={apiStatus} />}
-
-      {tab === "manual" && (
-        <CompraManual estoqueItens={estoqueItens} onRegistrar={onRegistrarCompraManual} historico={historicoManual} />
-      )}
-
-      {tab === "boleto" && (
-        <EntradaBoleto estoqueItens={estoqueItens} onRegistrar={onRegistrarBoleto} historico={historicoBoleto} />
-      )}
-
-      {tab === "xml" && (
-        <EntradaXML estoqueItens={estoqueItens} onRegistrar={onRegistrarXml} historico={historicoXml} />
-      )}
-
-      {tab === "pedidos" && (
-        <>
-          <PainelReposicaoCompras estoqueItens={estoqueItens} />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KPI label="Pedidos abertos" value="4" delta="R$ 15.300,00" positive icon={FileText} />
-            <KPI label="Recebidos (mês)" value="14" delta="+3 vs mês anterior" positive icon={PackageCheck} />
-            <KPI label="Fornecedores ativos" value="9" delta="1 novo este mês" positive icon={Truck} />
-            <KPI label="Prazo médio entrega" value="3,2 dias" delta="-0,5 dia vs média" positive icon={Clock} />
-          </div>
-
-          <Card className="p-4">
-            <div className="overflow-x-auto -mx-4">
-              <table className="w-full text-sm min-w-[680px]">
-                <thead>
-                  <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
-                    <th className="py-2.5 px-4 font-medium">Pedido</th>
-                    <th className="py-2.5 px-4 font-medium">Fornecedor</th>
-                    <th className="py-2.5 px-4 font-medium">Itens</th>
-                    <th className="py-2.5 px-4 font-medium text-right">Valor</th>
-                    <th className="py-2.5 px-4 font-medium">Status</th>
-                    <th className="py-2.5 px-4 font-medium">Data</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pedidosCompra.map(p => {
-                    const Icon = statusIcon[p.status];
-                    return (
-                      <tr key={p.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/20">
-                        <td className="py-3 px-4 font-mono text-xs text-slate-400">{p.id}</td>
-                        <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">{p.fornecedor}</td>
-                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400 max-w-[220px] truncate">{p.itens}</td>
-                        <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{p.valor}</td>
-                        <td className="py-3 px-4">
-                          <Badge tone={statusTone[p.status]}>
-                            <span className="inline-flex items-center gap-1"><Icon size={11} /> {statusLabel[p.status]}</span>
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{p.data}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </>
-      )}
-    </div>
-  );
+  const [tab, setTab] = useState("cotacoes");
+  const gestao = ["cotacoes", "pedidos", "recebimentos", "historico", "configuracoes"];
+  const abas = [["cotacoes","Cota&ccedil;&otilde;es"],["pedidos","Pedidos de Compra"],["recebimentos","Recebimentos"],["historico","Hist&oacute;rico de Pedidos"],["configuracoes","Configura&ccedil;&otilde;es"],["manual","Compra manual"],["boleto","Entrada por boleto"],["xml","Entrada por XML"]];
+  return <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Compras</h2><p className="text-sm text-slate-500">Cota&ccedil;&atilde;o por WhatsApp, pedidos, recebimento e estoque em um &uacute;nico fluxo.</p></div></div>
+    <div className="overflow-x-auto"><div className="flex min-w-max items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-700/40">{abas.map(([chave,rotulo])=><button key={chave} onClick={()=>setTab(chave)} className={cx("rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap",tab===chave?"bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white":"text-slate-500")} dangerouslySetInnerHTML={{__html:rotulo}}/>)}</div></div>
+    {gestao.includes(tab)&&<ComprasCotacoes aba={tab} apiStatus={apiStatus}/>}
+    {tab==="manual"&&<CompraManual estoqueItens={estoqueItens} onRegistrar={onRegistrarCompraManual} historico={historicoManual}/>}
+    {tab==="boleto"&&<EntradaBoleto estoqueItens={estoqueItens} onRegistrar={onRegistrarBoleto} historico={historicoBoleto}/>}
+    {tab==="xml"&&<EntradaXML estoqueItens={estoqueItens} onRegistrar={onRegistrarXml} historico={historicoXml}/>}
+  </div>;
 }
 
 function CentralImportacoes({ estoqueItens, fichas, mapeamentos, importacoes, onMapear, onConfirmar }) {
@@ -10633,7 +10550,7 @@ function Fornecedores() {
     e.preventDefault();
     const formData = new FormData(e.target);
     const dados = Object.fromEntries(formData);
-    
+
     try {
       if (fornecedorEdit?.id) {
         await api.atualizarFornecedor(fornecedorEdit.id, dados);

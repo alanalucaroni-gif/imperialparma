@@ -4,7 +4,7 @@ import { PageDto } from "../common/page.dto.js";
 
 export const PERMISSOES_PADRAO = [
   "receitas.visualizar", "receitas.criar", "receitas.editar", "receitas.excluir",
-  "financeiro", "estoque", "compras", "cadastros", "relatorios",
+  "financeiro", "estoque", "compras", "compras.cotacoes.visualizar", "compras.cotacoes.criar", "compras.cotacoes.enviar", "compras.cotacoes.finalizar", "compras.pedidos.gerar", "compras.pedidos.cancelar", "compras.recebimentos.criar", "compras.estoque.confirmar", "compras.valores.visualizar", "compras.economia.visualizar", "cadastros", "relatorios",
 ] as const;
 
 export class ListarUsuariosDto extends PageDto {
