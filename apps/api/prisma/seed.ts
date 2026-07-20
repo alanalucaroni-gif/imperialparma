@@ -24,10 +24,10 @@ async function main() {
     create: { nome: adminName, email: adminEmail, senhaHash: await hash(adminPassword, 12), role: Role.ADMINISTRADOR },
   });
   await prisma.insumo.updateMany({ where: { codigo: { in: codigosDemonstracao } }, data: { ativo: false } });
-  for (const [codigo, nome, categoria, unidade, quantidade] of inventarioInicial) {
+  for (const [codigo, nome, categoria, unidade, quantidade, estoqueMinimo] of inventarioInicial) {
     await prisma.insumo.upsert({
-      where: { codigo }, update: { nome, categoria, unidade, quantidade, ativo: true },
-      create: { codigo, nome, categoria, unidade, quantidade, estoqueMinimo: 0, custoUnitario: 0 },
+      where: { codigo }, update: { nome, categoria, unidade, quantidade, estoqueMinimo, ativo: true },
+      create: { codigo, nome, categoria, unidade, quantidade, estoqueMinimo, custoUnitario: 0 },
     });
   }
   console.log("Seed concluído: administrador e inventário atualizado.");

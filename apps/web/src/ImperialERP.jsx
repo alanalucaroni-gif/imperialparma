@@ -9545,7 +9545,7 @@ function CotacoesInteligentes({ estoqueItens, apiStatus }) {
     catch { return []; }
   });
   const dinheiro = valor => Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const alertas = useMemo(() => estoqueItens.filter(i => Number(i.min) > 0 && Number(i.qtd) < Number(i.min)).map(i => ({ ...i, comprar: Math.max(0, Number(i.min) - Number(i.qtd)), estimado: Math.max(0, Number(i.min) - Number(i.qtd)) * Number(i.custo || 0) })).sort((a, b) => a.qtd / a.min - b.qtd / b.min), [estoqueItens]);
+  const alertas = useMemo(() => estoqueItens.filter(i => Number(i.min) > 0 && Number(i.qtd) <= Number(i.min)).map(i => ({ ...i, comprar: Math.max(0, Number(i.min) - Number(i.qtd)), estimado: Math.max(0, Number(i.min) - Number(i.qtd)) * Number(i.custo || 0) })).sort((a, b) => a.qtd / a.min - b.qtd / b.min), [estoqueItens]);
   const estimado = alertas.reduce((total, item) => total + item.estimado, 0);
 
   useEffect(() => {
@@ -9611,7 +9611,7 @@ function CotacoesInteligentes({ estoqueItens, apiStatus }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h3 className="font-semibold text-slate-900 dark:text-white">Compras inteligentes em tempo real</h3><p className="text-xs text-slate-500 dark:text-slate-400">Estoque mínimo → WhatsApp → respostas dos fornecedores → menor custo total</p></div><Badge tone={apiStatus === "online" ? "green" : "amber"}>{apiStatus === "online" ? "Atualização a cada 10s" : "Simulação local"}</Badge></div>
       {feedback && <div className={cx("rounded-xl border px-4 py-3 text-sm", feedback.tone === "green" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300" : feedback.tone === "red" ? "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300" : "border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-300")}>{feedback.text}</div>}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4"><KPI label="Fornecedores" value={String((apiStatus === "online" ? fornecedoresApi : fornecedoresLocais).length)} delta="Consultados por WhatsApp" positive icon={Truck} /><KPI label="Abaixo do mínimo" value={String(alertas.length)} delta="Somente saldo menor que o mínimo" positive={alertas.length === 0} icon={AlertTriangle} /><KPI label="Reposição estimada" value={dinheiro(estimado)} delta="Custo atual de referência" positive icon={Wallet} /><KPI label="Cotações abertas" value={String(lista.length)} delta="Sem movimentar o caixa" positive icon={Trophy} /></div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4"><KPI label="Fornecedores" value={String((apiStatus === "online" ? fornecedoresApi : fornecedoresLocais).length)} delta="Consultados por WhatsApp" positive icon={Truck} /><KPI label="Abaixo do mínimo" value={String(alertas.length)} delta="Saldo menor ou igual ao mínimo" positive={alertas.length === 0} icon={AlertTriangle} /><KPI label="Reposição estimada" value={dinheiro(estimado)} delta="Custo atual de referência" positive icon={Wallet} /><KPI label="Cotações abertas" value={String(lista.length)} delta="Sem movimentar o caixa" positive icon={Trophy} /></div>
 
       <Card className="p-4"><div className="flex flex-col lg:flex-row lg:items-end gap-3"><div className="flex-1"><h4 className="font-semibold text-sm">Fornecedores para cotação</h4><p className="text-xs text-slate-400 mt-0.5">O número será usado somente no envio autorizado da solicitação</p></div><form onSubmit={cadastrarFornecedor} className="flex flex-col sm:flex-row gap-2"><input value={novoFornecedorNome} onChange={e => setNovoFornecedorNome(e.target.value)} placeholder="Nome do fornecedor" className="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm" /><input value={novoFornecedorTelefone} onChange={e => setNovoFornecedorTelefone(e.target.value)} placeholder="WhatsApp com DDD" className="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm" /><button className="rounded-xl bg-[#7A1420] text-white text-sm font-medium px-4 py-2">Cadastrar</button></form></div><div className="flex flex-wrap gap-2 mt-3">{(apiStatus === "online" ? fornecedoresApi : fornecedoresLocais).length ? (apiStatus === "online" ? fornecedoresApi : fornecedoresLocais).map(f => <Badge key={f.id} tone={f.telefone ? "green" : "amber"}>{f.nome} · {f.telefone || "sem WhatsApp"}</Badge>) : <span className="text-xs text-slate-400">Nenhum fornecedor cadastrado.</span>}</div></Card>
 
@@ -10139,6 +10139,27 @@ function EntradaXML({ estoqueItens, onRegistrar, historico }) {
   );
 }
 
+function PainelReposicaoCompras({ estoqueItens }) {
+  const alertas = useMemo(() => estoqueItens
+    .filter(item => Number(item.min) > 0 && Number(item.qtd) <= Number(item.min))
+    .map(item => ({ ...item, comprar: Math.max(0, Number(item.min) - Number(item.qtd)) }))
+    .sort((a, b) => (Number(a.qtd) / Number(a.min)) - (Number(b.qtd) / Number(b.min))), [estoqueItens]);
+
+  return (
+    <Card className="overflow-hidden border-amber-200 dark:border-amber-500/30">
+      <div className="p-4 border-b border-amber-100 dark:border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h3 className="font-semibold text-sm flex items-center gap-2"><AlertTriangle size={15} className="text-amber-600" /> Estoque mínimo conectado às Compras</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Saldo atual e mínimo vêm da mesma lista do módulo Estoque.</p>
+        </div>
+        <Badge tone={alertas.length ? "amber" : "green"}>{alertas.length ? `${alertas.length} item(ns) para repor` : "Tudo acima do mínimo"}</Badge>
+      </div>
+      {alertas.length ? (
+        <div className="overflow-x-auto"><table className="w-full text-sm min-w-[680px]"><thead><tr className="text-left text-xs uppercase text-slate-400 border-b border-slate-100 dark:border-slate-700"><th className="p-3">Item</th><th className="p-3">Categoria</th><th className="p-3 text-right">Atual</th><th className="p-3 text-right">Mínimo</th><th className="p-3 text-right">Sugestão de compra</th></tr></thead><tbody>{alertas.map(item => <tr key={item.cod} className="border-b border-slate-50 dark:border-slate-700/50"><td className="p-3 font-medium">{item.nome}<div className="font-mono text-[11px] text-slate-400">{item.cod}</div></td><td className="p-3 text-slate-500">{item.cat || "—"}</td><td className="p-3 text-right">{Number(item.qtd).toLocaleString("pt-BR")} {item.un}</td><td className="p-3 text-right font-medium">{Number(item.min).toLocaleString("pt-BR")} {item.un}</td><td className="p-3 text-right font-semibold text-[#7A1420]">{item.comprar.toLocaleString("pt-BR")} {item.un}</td></tr>)}</tbody></table></div>
+      ) : <div className="p-6 text-center text-sm text-slate-400">Nenhum item abaixo do mínimo definido no Estoque.</div>}
+    </Card>
+  );
+}
 function Compras({ estoqueItens, apiStatus, onAtualizarMinimo, onRegistrarCompraManual, historicoManual, onRegistrarBoleto, historicoBoleto, onRegistrarXml, historicoXml }) {
   const [tab, setTab] = useState("pedidos");
   const statusTone = { recebido: "green", parcial: "brand", pendente: "amber", cancelado: "red" };
@@ -10163,7 +10184,7 @@ function Compras({ estoqueItens, apiStatus, onAtualizarMinimo, onRegistrarCompra
         <button onClick={() => setTab("pedidos")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "pedidos" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Pedidos de compra</button>
         <button onClick={() => setTab("cotacoes")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap", tab === "cotacoes" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>
           Cotações
-          <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-full px-1.5 py-0.5">1</span>
+          <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-full px-1.5 py-0.5">{estoqueItens.filter(item => Number(item.min) > 0 && Number(item.qtd) <= Number(item.min)).length}</span>
         </button>
         <button onClick={() => setTab("manual")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "manual" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Compra manual</button>
         <button onClick={() => setTab("boleto")} className={cx("px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap", tab === "boleto" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500")}>Entrada por boleto</button>
@@ -10188,6 +10209,7 @@ function Compras({ estoqueItens, apiStatus, onAtualizarMinimo, onRegistrarCompra
 
       {tab === "pedidos" && (
         <>
+          <PainelReposicaoCompras estoqueItens={estoqueItens} />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KPI label="Pedidos abertos" value="4" delta="R$ 15.300,00" positive icon={FileText} />
             <KPI label="Recebidos (mês)" value="14" delta="+3 vs mês anterior" positive icon={PackageCheck} />
