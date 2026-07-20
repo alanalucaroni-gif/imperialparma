@@ -27,7 +27,7 @@ export class CotacoesService {
       this.prisma.pedidoCompra.findMany({ include: { fornecedor: true, itens: { include: { insumo: true } }, cotacao: true, recebimentos: true }, orderBy: { criadoEm: "desc" }, take: 50 }),
     ]);
     const sugestoes = insumos.map(item => {
-      const atual = n(item.quantidade), minimo = n(item.estoqueMinimo), quantidadeSugerida = Math.max(0, minimo - atual), ultimo = item.historicoPrecos[0];
+      const atual = Number(n(item.quantidade).toFixed(3)), minimo = Number(n(item.estoqueMinimo).toFixed(3)), quantidadeSugerida = Number(Math.max(0, minimo - atual).toFixed(3)), ultimo = item.historicoPrecos[0];
       return { id: item.id, codigo: item.codigo, nome: item.nome, categoria: item.categoria, unidade: item.unidade, estoqueAtual: atual, estoqueMinimo: minimo, quantidadeSugerida, ultimoValorCompra: ultimo ? n(ultimo.precoUnitario) : n(item.ultimoCustoCompra ?? item.custoUnitario), ultimoFornecedor: item.ultimoFornecedor?.nome || null, ultimaCompraEm: item.ultimaCompraEm, custoEstimado: quantidadeSugerida * n(item.custoUnitario), prioridade: atual <= 0 ? "critica" : atual < minimo * 0.5 ? "alta" : "normal" };
     }).filter(item => item.estoqueMinimo > 0 && item.estoqueAtual < item.estoqueMinimo);
     const apresentadas = cotacoes.map(item => this.apresentar(item));
