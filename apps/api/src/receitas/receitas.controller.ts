@@ -5,7 +5,7 @@ import { PermissionsGuard } from "../common/permissions.guard.js";
 import { Roles } from "../common/roles.decorator.js";
 import { RolesGuard } from "../common/roles.guard.js";
 import { Role } from "../generated/prisma/enums.js";
-import { AtualizarProducaoReceitaDto, AtualizarReceitaDto, CancelarProducaoReceitaDto, CriarProducaoReceitaDto, CriarReceitaDto, ListarProducoesReceitasDto, ListarReceitasDto, RankingProducoesDto } from "./receitas.dto.js";
+import { AdicionarObservacaoProducaoDto, AtualizarProducaoReceitaDto, AtualizarReceitaDto, CancelarProducaoReceitaDto, CriarProducaoReceitaDto, CriarReceitaDto, InformarPerdaProducaoDto, ListarProducoesReceitasDto, ListarReceitasDto, RankingProducoesDto } from "./receitas.dto.js";
 import { ReceitasService } from "./receitas.service.js";
 
 const rolesReceitas = [Role.ADMINISTRADOR, Role.GERENTE, Role.PRODUCAO, Role.COZINHA];
@@ -38,4 +38,8 @@ export class ProducoesReceitasController {
   @Post() @Permissions("receitas.criar") criar(@Body() dto: CriarProducaoReceitaDto) { return this.receitas.criarProducao(dto); }
   @Patch(":id") @Permissions("receitas.editar") atualizar(@Param("id") id: string, @Body() dto: AtualizarProducaoReceitaDto) { return this.receitas.atualizarProducao(id, dto); }
   @Post(":id/cancelar") @Permissions("receitas.editar") cancelar(@Param("id") id: string, @Body() dto: CancelarProducaoReceitaDto) { return this.receitas.cancelarProducao(id, dto.motivo); }
+  @Post(":id/pausar") @Permissions("receitas.editar") pausar(@Param("id") id: string) { return this.receitas.pausarProducao(id); }
+  @Post(":id/continuar") @Permissions("receitas.editar") continuar(@Param("id") id: string) { return this.receitas.continuarProducao(id); }
+  @Post(":id/perda") @Permissions("receitas.editar") perda(@Param("id") id: string, @Body() dto: InformarPerdaProducaoDto) { return this.receitas.informarPerda(id, dto); }
+  @Post(":id/observacao") @Permissions("receitas.editar") observacao(@Param("id") id: string, @Body() dto: AdicionarObservacaoProducaoDto) { return this.receitas.adicionarObservacao(id, dto.observacao); }
 }

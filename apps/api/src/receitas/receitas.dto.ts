@@ -10,6 +10,12 @@ export class ItemReceitaDto {
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) custoUnitario?: number;
 }
 
+export class EtapaReceitaDto {
+  @IsString() @MinLength(1) nome!: string;
+  @IsOptional() @IsString() descricao?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) tempoMinutos?: number;
+}
+
 export class CriarReceitaDto {
   @IsString() @MinLength(2) nome!: string;
   @IsOptional() @IsString() categoria?: string;
@@ -19,6 +25,11 @@ export class CriarReceitaDto {
   @IsString() @MinLength(1) unidadeRendimento!: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) tempoPreparoMinutos?: number;
   @IsOptional() @IsString() modoPreparo?: string;
+  @IsOptional() @IsString() setorPadrao?: string;
+  @IsOptional() @IsString() instrucoesProducao?: string;
+  @IsOptional() @IsString() equipamentos?: string;
+  @IsOptional() @IsString() responsavelPadrao?: string;
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => EtapaReceitaDto) etapas?: EtapaReceitaDto[];
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) custoEstimado?: number;
   @IsOptional() @IsString() observacoes?: string;
   @IsOptional() @IsBoolean() ativo?: boolean;
@@ -34,6 +45,11 @@ export class AtualizarReceitaDto {
   @IsOptional() @IsString() @MinLength(1) unidadeRendimento?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) tempoPreparoMinutos?: number;
   @IsOptional() @IsString() modoPreparo?: string;
+  @IsOptional() @IsString() setorPadrao?: string;
+  @IsOptional() @IsString() instrucoesProducao?: string;
+  @IsOptional() @IsString() equipamentos?: string;
+  @IsOptional() @IsString() responsavelPadrao?: string;
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => EtapaReceitaDto) etapas?: EtapaReceitaDto[];
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) custoEstimado?: number;
   @IsOptional() @IsString() observacoes?: string;
   @IsOptional() @IsBoolean() ativo?: boolean;
@@ -51,6 +67,7 @@ export class ListarReceitasDto extends PageDto {
 export class CriarProducaoReceitaDto {
   @IsString() receitaId!: string;
   @IsString() funcionarioId!: string;
+  @IsString() @MinLength(1) setor!: string;
   @Type(() => Number) @IsNumber() @Min(0.001) quantidadeProduzida!: number;
   @IsString() @MinLength(1) unidade!: string;
   @IsDateString() dataProducao!: string;
@@ -58,13 +75,16 @@ export class CriarProducaoReceitaDto {
   @IsOptional() @IsDateString() horaFim?: string;
   @IsOptional() @IsString() lote?: string;
   @IsOptional() @IsDateString() validade?: string;
-  @IsOptional() @IsIn(["EM_ANDAMENTO", "CONCLUIDA"]) status?: "EM_ANDAMENTO" | "CONCLUIDA";
+  @IsOptional() @IsIn(["EM_ANDAMENTO", "PAUSADA", "CONCLUIDA"]) status?: "EM_ANDAMENTO" | "PAUSADA" | "CONCLUIDA";
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) quantidadePerdida?: number;
+  @IsOptional() @IsString() motivoPerda?: string;
   @IsOptional() @IsString() observacoes?: string;
 }
 
 export class AtualizarProducaoReceitaDto {
   @IsOptional() @IsString() receitaId?: string;
   @IsOptional() @IsString() funcionarioId?: string;
+  @IsOptional() @IsString() @MinLength(1) setor?: string;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0.001) quantidadeProduzida?: number;
   @IsOptional() @IsString() @MinLength(1) unidade?: string;
   @IsOptional() @IsDateString() dataProducao?: string;
@@ -72,8 +92,19 @@ export class AtualizarProducaoReceitaDto {
   @IsOptional() @IsDateString() horaFim?: string;
   @IsOptional() @IsString() lote?: string;
   @IsOptional() @IsDateString() validade?: string;
-  @IsOptional() @IsIn(["EM_ANDAMENTO", "CONCLUIDA"]) status?: "EM_ANDAMENTO" | "CONCLUIDA";
+  @IsOptional() @IsIn(["EM_ANDAMENTO", "PAUSADA", "CONCLUIDA"]) status?: "EM_ANDAMENTO" | "PAUSADA" | "CONCLUIDA";
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) quantidadePerdida?: number;
+  @IsOptional() @IsString() motivoPerda?: string;
   @IsOptional() @IsString() observacoes?: string;
+}
+
+export class InformarPerdaProducaoDto {
+  @Type(() => Number) @IsNumber() @Min(0) quantidadePerdida!: number;
+  @IsString() @MinLength(3) motivo!: string;
+}
+
+export class AdicionarObservacaoProducaoDto {
+  @IsString() @MinLength(1) observacao!: string;
 }
 
 export class CancelarProducaoReceitaDto {
@@ -85,7 +116,7 @@ export class ListarProducoesReceitasDto extends PageDto {
   @IsOptional() @IsString() funcionarioId?: string;
   @IsOptional() @IsString() setor?: string;
   @IsOptional() @IsString() receitaId?: string;
-  @IsOptional() @IsIn(["EM_ANDAMENTO", "CONCLUIDA", "CANCELADA"]) status?: "EM_ANDAMENTO" | "CONCLUIDA" | "CANCELADA";
+  @IsOptional() @IsIn(["EM_ANDAMENTO", "PAUSADA", "CONCLUIDA", "CANCELADA"]) status?: "EM_ANDAMENTO" | "PAUSADA" | "CONCLUIDA" | "CANCELADA";
   @IsOptional() @IsIn(["hoje", "semana", "mes", "personalizado", "todos"]) periodo?: "hoje" | "semana" | "mes" | "personalizado" | "todos";
   @IsOptional() @IsDateString() dataInicio?: string;
   @IsOptional() @IsDateString() dataFim?: string;

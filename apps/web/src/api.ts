@@ -132,6 +132,10 @@ class ImperialApi {
   cadastrarProducaoReceita(body: any) { return this.request<any>("/producoes-receitas", { method: "POST", body: JSON.stringify(body) }); }
   atualizarProducaoReceita(id: string, body: any) { return this.request<any>("/producoes-receitas/" + id, { method: "PATCH", body: JSON.stringify(body) }); }
   cancelarProducaoReceita(id: string, motivo: string) { return this.request<any>("/producoes-receitas/" + id + "/cancelar", { method: "POST", body: JSON.stringify({ motivo }) }); }
+  pausarProducaoReceita(id: string) { return this.request<any>("/producoes-receitas/" + id + "/pausar", { method: "POST" }); }
+  continuarProducaoReceita(id: string) { return this.request<any>("/producoes-receitas/" + id + "/continuar", { method: "POST" }); }
+  informarPerdaProducao(id: string, body: { quantidadePerdida: number; motivo: string }) { return this.request<any>("/producoes-receitas/" + id + "/perda", { method: "POST", body: JSON.stringify(body) }); }
+  adicionarObservacaoProducao(id: string, observacao: string) { return this.request<any>("/producoes-receitas/" + id + "/observacao", { method: "POST", body: JSON.stringify({ observacao }) }); }
   getIndicadoresProducao(params?: Record<string, string | number | boolean | undefined>) { return this.request<any>("/producoes-receitas/indicadores" + this.query(params)); }
   getRankingProducao(params?: Record<string, string | number | boolean | undefined>) { return this.request<any[]>("/producoes-receitas/ranking" + this.query(params)); }
 

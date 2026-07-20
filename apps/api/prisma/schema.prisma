@@ -50,6 +50,7 @@ enum OrdemStatus {
 
 enum ProducaoReceitaStatus {
   EM_ANDAMENTO
+  PAUSADA
   CONCLUIDA
   CANCELADA
 }
@@ -314,6 +315,11 @@ model Receita {
   modoPreparo         String?
   custoEstimado       Decimal?          @db.Decimal(14, 4)
   observacoes         String?
+  setorPadrao         String?
+  instrucoesProducao  String?
+  equipamentos        String?
+  responsavelPadrao   String?
+  etapas              Json?
   ativo               Boolean           @default(true)
   itens               ItemReceita[]
   producoes           ProducaoReceita[]
@@ -350,6 +356,9 @@ model ProducaoReceita {
   funcionario          Funcionario           @relation(fields: [funcionarioId], references: [id])
   quantidadeProduzida  Decimal               @db.Decimal(14, 3)
   unidade              String
+  setor                String
+  quantidadePerdida   Decimal               @default(0) @db.Decimal(14, 3)
+  motivoPerda          String?
   dataProducao         DateTime
   horaInicio           DateTime?
   horaFim              DateTime?
