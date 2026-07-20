@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException, UnauthorizedExcepti
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { CotacaoStatus, ParticipacaoCotacaoStatus, Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { IntegracoesService } from "../integracoes/integracoes.service.js";
 import type { CadastrarFornecedorCotacaoDto, CriarCotacaoInteligenteDto, EncerrarCotacaoDto, FinalizarCotacaoDto, ProrrogarCotacaoDto, RecusarCotacaoDto, RegistrarRespostaCotacaoDto, RespostaPublicaCotacaoDto } from "./cotacoes.dto.js";
 
 const n = (valor: unknown) => Number(valor || 0);
@@ -12,7 +13,7 @@ const encerrada = (status: CotacaoStatus) => ([CotacaoStatus.FINALIZADA, Cotacao
 
 @Injectable()
 export class CotacoesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly integracoes: IntegracoesService) {}
 
   async painel() {
     const agora = new Date();
@@ -103,7 +104,8 @@ export class CotacoesService {
     const cotacao: any = await this.prisma.cotacao.findUnique({ where: { codigo }, include: this.incluirCotacao() });
     if (!cotacao) throw new NotFoundException("Cotação não encontrada.");
     if (encerrada(cotacao.status)) throw new BadRequestException("Esta cotação já foi encerrada.");
-    const configurada = Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_GRAPH_VERSION && process.env.WHATSAPP_COTACAO_TEMPLATE);
+    const whatsapp = await this.integracoes.obterWhatsappConfiguracao();
+    const configurada = Boolean(whatsapp);
     const resultados: any[] = [];
     for (const proposta of cotacao.propostas) {
       if (!proposta.tokenPublico) continue;
@@ -111,9 +113,9 @@ export class CotacoesService {
       if (!destino) { resultados.push({ participacaoId: proposta.id, fornecedor: proposta.fornecedor.nome, enviada: false, erro: "WhatsApp não cadastrado" }); continue; }
       const link = this.linkPublico(proposta.tokenPublico), mensagem = this.mensagemWhatsapp(cotacao, proposta.fornecedor.nome, link);
       let enviada = false, mensagemId: string | undefined, erro: string | undefined;
-      if (configurada) {
+      if (whatsapp) {
         try {
-          const resposta = await fetch(`https://graph.facebook.com/${process.env.WHATSAPP_GRAPH_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, { method: "POST", headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ messaging_product: "whatsapp", to: destino, type: "template", template: { name: process.env.WHATSAPP_COTACAO_TEMPLATE, language: { code: "pt_BR" }, components: [{ type: "body", parameters: [{ type: "text", text: proposta.fornecedor.nome }, { type: "text", text: cotacao.codigo }, { type: "text", text: String(cotacao.itens.length || 1) }, { type: "text", text: this.dataHora(cotacao.prazoResposta) }] }, { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: proposta.tokenPublico }] }] } }) });
+          const resposta = await fetch(`https://graph.facebook.com/${whatsapp.graphVersion}/${whatsapp.phoneNumberId}/messages`, { method: "POST", headers: { Authorization: `Bearer ${whatsapp.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ messaging_product: "whatsapp", to: destino, type: "template", template: { name: whatsapp.templateName, language: { code: whatsapp.templateLanguage }, components: [{ type: "body", parameters: [{ type: "text", text: proposta.fornecedor.nome }, { type: "text", text: cotacao.codigo }, { type: "text", text: String(cotacao.itens.length || 1) }, { type: "text", text: this.dataHora(cotacao.prazoResposta) }] }, { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: proposta.tokenPublico }] }] } }) });
           const corpo = await resposta.json() as any; mensagemId = corpo.messages?.[0]?.id; enviada = resposta.ok && Boolean(mensagemId); if (!enviada) erro = corpo.error?.message || `HTTP ${resposta.status}`;
         } catch (error: any) { erro = error?.message || "Falha na API do WhatsApp"; }
       }
@@ -174,10 +176,17 @@ export class CotacoesService {
   async listarPedidos() { const pedidos = await this.prisma.pedidoCompra.findMany({ include: { fornecedor: true, cotacao: true, itens: { include: { insumo: true } }, recebimentos: { include: { itens: true } } }, orderBy: { criadoEm: "desc" } }); return { data: pedidos.map(item => this.apresentarPedido(item)) }; }
   async pdfPedido(id: string) { const pedido = await this.prisma.pedidoCompra.findUnique({ where: { id }, select: { codigo: true, pdfArquivo: true, pdfNome: true } }); if (!pedido?.pdfArquivo) throw new NotFoundException("PDF do pedido não encontrado."); return { arquivo: Buffer.from(pedido.pdfArquivo), nome: pedido.pdfNome || pedido.codigo + ".pdf" }; }
 
-  validarAssinatura(rawBody: Buffer | undefined, assinatura: string | undefined) {
-    const appSecret = process.env.WHATSAPP_APP_SECRET; if (!appSecret || !rawBody || !assinatura) throw new UnauthorizedException("Assinatura do webhook ausente.");
+  async tokenWebhookValido(token: string) {
+    const whatsapp = await this.integracoes.obterWhatsappConfiguracao();
+    return Boolean(whatsapp?.verifyToken && token === whatsapp.verifyToken);
+  }
+
+  async validarAssinatura(rawBody: Buffer | undefined, assinatura: string | undefined) {
+    const whatsapp = await this.integracoes.obterWhatsappConfiguracao();
+    const appSecret = whatsapp?.appSecret;
+    if (!appSecret || !rawBody || !assinatura) throw new UnauthorizedException("Assinatura do webhook ausente.");
     const esperada = `sha256=${createHmac("sha256", appSecret).update(rawBody).digest("hex")}`, recebidaBuffer = Buffer.from(assinatura), esperadaBuffer = Buffer.from(esperada);
-    if (recebidaBuffer.length !== esperadaBuffer.length || !timingSafeEqual(recebidaBuffer, esperadaBuffer)) throw new UnauthorizedException("Assinatura do webhook inválida.");
+    if (recebidaBuffer.length !== esperadaBuffer.length || !timingSafeEqual(recebidaBuffer, esperadaBuffer)) throw new UnauthorizedException("Assinatura do webhook invalida.");
   }
 
   async processarWebhook(payload: any) {

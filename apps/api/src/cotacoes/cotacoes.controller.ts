@@ -42,6 +42,15 @@ export class CotacoesPublicasController {
 @Controller("webhooks/whatsapp")
 export class WhatsappWebhookController {
   constructor(private readonly cotacoes: CotacoesService) {}
-  @Get() verificar(@Query("hub.mode") modo: string, @Query("hub.verify_token") token: string, @Query("hub.challenge") desafio: string, @Res() resposta: Response) { if (modo === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) return resposta.status(200).send(desafio); return resposta.status(403).send("Token de verificação inválido"); }
-  @Post() receber(@Req() requisicao: RawBodyRequest<Request>, @Headers("x-hub-signature-256") assinatura: string | undefined, @Body() payload: any) { this.cotacoes.validarAssinatura(requisicao.rawBody, assinatura); return this.cotacoes.processarWebhook(payload); }
+  @Get()
+  async verificar(@Query("hub.mode") modo: string, @Query("hub.verify_token") token: string, @Query("hub.challenge") desafio: string, @Res() resposta: Response) {
+    if (modo === "subscribe" && await this.cotacoes.tokenWebhookValido(token)) return resposta.status(200).send(desafio);
+    return resposta.status(403).send("Token de verificacao invalido");
+  }
+
+  @Post()
+  async receber(@Req() requisicao: RawBodyRequest<Request>, @Headers("x-hub-signature-256") assinatura: string | undefined, @Body() payload: any) {
+    await this.cotacoes.validarAssinatura(requisicao.rawBody, assinatura);
+    return this.cotacoes.processarWebhook(payload);
+  }
 }

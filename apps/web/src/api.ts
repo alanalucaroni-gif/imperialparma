@@ -186,6 +186,10 @@ class ImperialApi {
   removerCredencialIntegracao(plataforma: string) {
     return this.request<any>(`/integracoes/credenciais/${plataforma}`, { method: "DELETE" });
   }
+  getWhatsappMeta() { return this.request<any>("/integracoes/whatsapp-meta"); }
+  salvarWhatsappMeta(body: any) { return this.request<any>("/integracoes/whatsapp-meta", { method: "PUT", body: JSON.stringify(body) }); }
+  verificarWhatsappMeta() { return this.request<any>("/integracoes/whatsapp-meta/verificar", { method: "POST" }); }
+  removerWhatsappMeta() { return this.request<any>("/integracoes/whatsapp-meta", { method: "DELETE" }); }
 
   private query(params?: Record<string, string | number | boolean | undefined>) {
     const valores = Object.entries(params || {}).filter(([, valor]) => valor !== undefined && valor !== "").map(([chave, valor]) => [chave, String(valor)]);

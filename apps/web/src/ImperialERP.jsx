@@ -10349,6 +10349,78 @@ function salvarCredenciaisLocais(credenciais) {
   localStorage.setItem(CREDENCIAIS_LOCAIS_KEY, JSON.stringify(credenciais));
 }
 
+const WHATSAPP_META_INICIAL = { phoneNumberId: "", graphVersion: "v24.0", templateName: "cotacao_fornecedor", templateLanguage: "pt_BR", accessToken: "", verifyToken: "", appSecret: "" };
+
+function WhatsappMetaConfiguracao({ apiStatus }) {
+  const [status, setStatus] = useState(null);
+  const [formulario, setFormulario] = useState(WHATSAPP_META_INICIAL);
+  const [feedback, setFeedback] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [guiaAberto, setGuiaAberto] = useState(false);
+
+  function aplicarStatus(item) {
+    setStatus(item);
+    setFormulario(prev => ({ ...prev, phoneNumberId: item.phoneNumberId || "", graphVersion: item.graphVersion || "v24.0", templateName: item.templateName || "cotacao_fornecedor", templateLanguage: item.templateLanguage || "pt_BR", accessToken: "", verifyToken: "", appSecret: "" }));
+  }
+
+  useEffect(() => {
+    let ativo = true;
+    async function carregar() {
+      if (apiStatus !== "online") return;
+      setCarregando(true);
+      try { const item = await api.getWhatsappMeta(); if (ativo) aplicarStatus(item); }
+      catch (error) { if (ativo) setFeedback({ tone: "red", text: error?.message || "Nao foi possivel consultar a API do WhatsApp." }); }
+      finally { if (ativo) setCarregando(false); }
+    }
+    carregar();
+    return () => { ativo = false; };
+  }, [apiStatus]);
+
+  function alterar(campo, valor) { setFormulario(prev => ({ ...prev, [campo]: valor })); }
+
+  async function salvar() {
+    if (apiStatus !== "online") { setFeedback({ tone: "red", text: "Conecte a API do ERP antes de configurar o WhatsApp." }); return; }
+    if (!formulario.phoneNumberId.trim() || !formulario.graphVersion.trim() || !formulario.templateName.trim() || !formulario.templateLanguage.trim()) { setFeedback({ tone: "red", text: "Preencha o Phone Number ID, versao, template e idioma." }); return; }
+    if (!status?.configurada && (!formulario.accessToken.trim() || !formulario.verifyToken.trim() || !formulario.appSecret.trim())) { setFeedback({ tone: "red", text: "Na primeira configuracao, informe o token permanente, o Verify Token e o App Secret." }); return; }
+    setCarregando(true);setFeedback({ tone: "amber", text: "Criptografando e salvando a configuracao..." });
+    try {
+      const payload = { phoneNumberId: formulario.phoneNumberId.trim(), graphVersion: formulario.graphVersion.trim(), templateName: formulario.templateName.trim(), templateLanguage: formulario.templateLanguage.trim(), ...(formulario.accessToken.trim()?{accessToken:formulario.accessToken.trim()}:{}), ...(formulario.verifyToken.trim()?{verifyToken:formulario.verifyToken.trim()}:{}), ...(formulario.appSecret.trim()?{appSecret:formulario.appSecret.trim()}:{}) };
+      const item = await api.salvarWhatsappMeta(payload); aplicarStatus(item); setFeedback({ tone: "green", text: "Configuracao salva com criptografia. Agora use Testar na Meta." });
+    } catch (error) { setFeedback({ tone: "red", text: error?.message || "Nao foi possivel salvar a configuracao." }); }
+    finally { setCarregando(false); }
+  }
+
+  async function verificar() {
+    setCarregando(true);setFeedback({ tone: "amber", text: "Consultando o numero diretamente na Meta..." });
+    try { const resposta = await api.verificarWhatsappMeta(); setStatus(prev => ({ ...prev, verificadoEm: resposta.verificadoEm })); setFeedback({ tone: "green", text: "Meta conectada" + (resposta.numero ? " ao numero " + resposta.numero : "") + (resposta.nomeVerificado ? " (" + resposta.nomeVerificado + ")" : "") + "." }); }
+    catch (error) { setFeedback({ tone: "red", text: error?.message || "A Meta nao aceitou essa configuracao." }); }
+    finally { setCarregando(false); }
+  }
+
+  async function remover() {
+    if (!window.confirm("Remover a configuracao da API oficial do WhatsApp?")) return;
+    setCarregando(true);
+    try { await api.removerWhatsappMeta(); aplicarStatus({ configurada:false, phoneNumberId:"", graphVersion:"v24.0", templateName:"cotacao_fornecedor", templateLanguage:"pt_BR", webhookUrl:status?.webhookUrl }); setFeedback({ tone:"green", text:"Configuracao do WhatsApp removida." }); }
+    catch (error) { setFeedback({ tone:"red", text:error?.message || "Nao foi possivel remover a configuracao." }); }
+    finally { setCarregando(false); }
+  }
+
+  const salvo = Boolean(status?.configurada);
+  const verificado = Boolean(status?.verificadoEm);
+  const campo = "mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]";
+  return <Card className="overflow-hidden border-emerald-200 dark:border-emerald-500/20">
+    <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5 dark:border-slate-700"><div className="flex items-start gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><Send size={19}/></div><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">WhatsApp Cloud API - Meta</h3><Badge tone={verificado?"green":salvo?"amber":"slate"}>{verificado?"API verificada":salvo?"Configuracao salva":"Nao configurada"}</Badge></div><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Envia a cotacao aos fornecedores pelo WhatsApp oficial e protege os tokens do webhook.</p></div></div><button onClick={()=>setGuiaAberto(prev=>!prev)} className="w-fit rounded-xl border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{guiaAberto?"Fechar orientacoes":"Como configurar"}</button></div>
+    {guiaAberto&&<div className="border-b border-emerald-100 bg-emerald-50/70 p-4 text-xs text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"><ol className="list-decimal space-y-1 pl-4"><li>No Meta for Developers, abra WhatsApp &gt; Configuracao da API e copie o Phone Number ID.</li><li>Gere um token permanente de usuario do sistema com permissao para WhatsApp.</li><li>Em Webhooks, use a URL abaixo e informe o mesmo Verify Token cadastrado aqui.</li><li>Cadastre e aprove o template informado, com os dados da cotacao e botao para o formulario.</li></ol></div>}
+    <div className="space-y-4 p-4 sm:p-5">
+      {feedback&&<div className={cx("rounded-xl border px-3 py-2 text-xs",feedback.tone==="green"?"border-emerald-200 bg-emerald-50 text-emerald-700":feedback.tone==="red"?"border-rose-200 bg-rose-50 text-rose-700":"border-amber-200 bg-amber-50 text-amber-700")}>{feedback.text}</div>}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4"><label className="text-xs text-slate-500">Phone Number ID<input value={formulario.phoneNumberId} onChange={e=>alterar("phoneNumberId",e.target.value)} placeholder="Ex.: 123456789012345" className={campo}/></label><label className="text-xs text-slate-500">Versao da Graph API<input value={formulario.graphVersion} onChange={e=>alterar("graphVersion",e.target.value)} placeholder="v24.0" className={campo}/></label><label className="text-xs text-slate-500">Template aprovado<input value={formulario.templateName} onChange={e=>alterar("templateName",e.target.value)} className={campo}/></label><label className="text-xs text-slate-500">Idioma do template<input value={formulario.templateLanguage} onChange={e=>alterar("templateLanguage",e.target.value)} className={campo}/></label></div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3"><label className="text-xs text-slate-500">Token permanente da Meta<input type="password" value={formulario.accessToken} onChange={e=>alterar("accessToken",e.target.value)} placeholder={status?.possuiAccessToken?"Salvo - deixe vazio para manter":"Cole o token permanente"} autoComplete="new-password" className={campo}/></label><label className="text-xs text-slate-500">Verify Token do webhook<input type="password" value={formulario.verifyToken} onChange={e=>alterar("verifyToken",e.target.value)} placeholder={status?.possuiVerifyToken?"Salvo - deixe vazio para manter":"Crie um token seguro"} autoComplete="new-password" className={campo}/></label><label className="text-xs text-slate-500">App Secret<input type="password" value={formulario.appSecret} onChange={e=>alterar("appSecret",e.target.value)} placeholder={status?.possuiAppSecret?"Salvo - deixe vazio para manter":"App Secret da Meta"} autoComplete="new-password" className={campo}/></label></div>
+      <label className="block text-xs text-slate-500">URL de callback do webhook<div className="mt-1.5 flex gap-2"><input readOnly value={status?.webhookUrl||"Disponivel apos conectar a API"} className={campo.replace("mt-1.5 ","")+" font-mono text-xs"}/><button onClick={()=>navigator.clipboard?.writeText(status?.webhookUrl||"")} disabled={!status?.webhookUrl} className="rounded-xl border border-slate-300 px-3 text-xs font-semibold disabled:opacity-40">Copiar</button></div></label>
+      <div className="flex flex-wrap items-center gap-2"><button onClick={salvar} disabled={carregando||apiStatus!=="online"} className="rounded-xl bg-[#7A1420] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40">{carregando?"Processando...":salvo?"Atualizar configuracao":"Salvar configuracao"}</button><button onClick={verificar} disabled={carregando||!salvo} className="rounded-xl border border-emerald-400 px-4 py-2.5 text-sm font-medium text-emerald-700 disabled:opacity-40">Testar na Meta</button>{salvo&&<button onClick={remover} disabled={carregando} className="px-2 py-2.5 text-xs text-rose-600 hover:underline">Remover</button>}<span className="text-[11px] text-slate-400">{status?.fonte==="render"?"Credencial carregada do Render":status?.atualizadoEm?"Atualizada em "+new Date(status.atualizadoEm).toLocaleString("pt-BR"):""}</span></div>
+    </div>
+  </Card>;
+}
+
 function ConfiguracoesIntegracoes({ apiStatus }) {
   const [credenciais, setCredenciais] = useState({});
   const [formularios, setFormularios] = useState(() => Object.fromEntries(
@@ -10469,6 +10541,8 @@ function ConfiguracoesIntegracoes({ apiStatus }) {
           <div><div className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Cadastro protegido</div><p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">O token é criptografado antes de ser salvo e nunca volta a aparecer na tela. A verificação confirma que a credencial está protegida e disponível; a importação automática só será ativada depois da validação da API e dos webhooks de cada plataforma.</p>{apiStatus !== "online" && <p className="text-[11px] text-amber-600 dark:text-amber-300 mt-2">API do ERP indisponível: a proteção atual vale apenas para esta sessão do navegador.</p>}</div>
         </div>
       </Card>
+
+      <WhatsappMetaConfiguracao apiStatus={apiStatus} />
 
       {feedbacks.geral && <div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300 px-4 py-3 text-sm">{feedbacks.geral.text}</div>}
 
