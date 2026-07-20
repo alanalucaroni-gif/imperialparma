@@ -11,9 +11,13 @@ enum Role {
   ADMINISTRADOR
   GERENTE
   COZINHA
+  PRODUCAO
   COMPRAS
   FINANCEIRO
   ESTOQUE
+  CAIXA
+  ATENDENTE
+  PERSONALIZADO
 }
 
 enum MovimentacaoTipo {
@@ -67,17 +71,46 @@ enum EntradaOrigem {
 }
 
 model Usuario {
-  id           String         @id @default(cuid())
-  nome         String
-  email        String         @unique
-  senhaHash    String
-  role         Role           @default(ESTOQUE)
-  ativo        Boolean        @default(true)
+  id            String         @id @default(cuid())
+  nome          String
+  login         String?        @unique
+  email         String         @unique
+  senhaHash     String
+  role          Role           @default(ESTOQUE)
+  permissoes    String[]       @default([])
+  funcionarioId String?        @unique
+  funcionario   Funcionario?   @relation(fields: [funcionarioId], references: [id], onDelete: SetNull)
+  ativo         Boolean        @default(true)
+  ultimoAcesso  DateTime?
   refreshTokens RefreshToken[]
-  criadoEm     DateTime       @default(now())
-  atualizadoEm DateTime       @updatedAt
+  criadoEm      DateTime       @default(now())
+  atualizadoEm  DateTime       @updatedAt
 }
 
+model Funcionario {
+  id             String      @id @default(cuid())
+  codigo         Int         @unique @default(autoincrement())
+  nome           String
+  cpf            String?     @unique
+  rg             String?
+  dataNascimento DateTime?
+  dataAdmissao   DateTime?
+  cargo          String
+  setor          String
+  telefone       String?
+  email          String?
+  endereco       String?
+  salario        Decimal?    @db.Decimal(14, 2)
+  ativo          Boolean     @default(true)
+  observacoes    String?
+  fotoUrl        String?
+  usuario        Usuario?
+  criadoEm       DateTime    @default(now())
+  atualizadoEm   DateTime    @updatedAt
+
+  @@index([nome])
+  @@index([setor, cargo, ativo])
+}
 model RefreshToken {
   id        String   @id @default(cuid())
   tokenHash String   @unique
@@ -129,13 +162,25 @@ model Movimentacao {
 }
 
 model Fornecedor {
-  id             String              @id @default(cuid())
-  nome           String
-  cnpj           String?             @unique
-  email          String?
-  telefone       String?
-  endereco       String?
-  observacao     String?
+  id               String              @id @default(cuid())
+  nome             String
+  razaoSocial      String?
+  nomeFantasia     String?
+  cnpj             String?             @unique
+  inscricaoEstadual String?
+  email            String?
+  telefone         String?
+  whatsapp         String?
+  site             String?
+  endereco         String?
+  cidade           String?
+  estado           String?
+  cep              String?
+  contatoPrincipal String?
+  categoria        String?
+  formaPagamento  String?
+  prazoPagamento  Int?
+  observacao       String?
   ativo          Boolean             @default(true)
   pedidos        PedidoCompra[]
   propostas      CotacaoFornecedor[]

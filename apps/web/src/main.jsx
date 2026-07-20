@@ -34,7 +34,7 @@ function LoginScreen({ onLogin }) {
         </div>
         <form onSubmit={entrar} className="space-y-4">
           <label className="block text-sm font-medium text-slate-700">
-            E-mail
+            E-mail ou login
             <input
               type="email"
               value={email}

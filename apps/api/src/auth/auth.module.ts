@@ -6,11 +6,12 @@ import { JwtAuthGuard } from "./jwt-auth.guard.js";
 import { JwtStrategy } from "./jwt.strategy.js";
 import { AuthService } from "./auth.service.js";
 import { RolesGuard } from "../common/roles.guard.js";
+import { PermissionsGuard } from "../common/permissions.guard.js";
 
 @Module({
   imports: [PassportModule, JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
-  exports: [JwtAuthGuard, RolesGuard],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard, PermissionsGuard],
+  exports: [JwtAuthGuard, RolesGuard, PermissionsGuard],
 })
 export class AuthModule {}

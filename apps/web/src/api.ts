@@ -107,11 +107,11 @@ class ImperialApi {
     return this.renovarSessao();
   }
 
-  getUsuarios() { return this.request<Usuario[]>("/usuarios"); }
-  cadastrarUsuario(body: { nome: string; email: string; role: string; senha: string; ativo?: boolean }) {
+  getUsuarios(params?: Record<string, string | number | boolean | undefined>) { return this.request<any>("/usuarios" + this.query(params)); }
+  cadastrarUsuario(body: { nome: string; login: string; email: string; role: string; senha: string; funcionarioId?: string; permissoes?: string[]; ativo?: boolean }) {
     return this.request<Usuario>("/usuarios", { method: "POST", body: JSON.stringify(body) });
   }
-  atualizarUsuario(id: string, body: { nome?: string; email?: string; role?: string; ativo?: boolean }) {
+  atualizarUsuario(id: string, body: { nome?: string; login?: string; email?: string; role?: string; funcionarioId?: string; permissoes?: string[]; ativo?: boolean }) {
     return this.request<Usuario>(`/usuarios/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   }
   redefinirSenhaUsuario(id: string, senha: string) {
@@ -147,11 +147,22 @@ class ImperialApi {
     return this.request<any>(`/integracoes/credenciais/${plataforma}`, { method: "DELETE" });
   }
 
-  // --- Fornecedores ---
-  getFornecedores(params?: { busca?: string; ativo?: string }) {
-    const qs = new URLSearchParams(params as any).toString();
-    return this.request<any>(`/fornecedores${qs ? '?' + qs : ''}`);
+  private query(params?: Record<string, string | number | boolean | undefined>) {
+    const valores = Object.entries(params || {}).filter(([, valor]) => valor !== undefined && valor !== "").map(([chave, valor]) => [chave, String(valor)]);
+    const qs = new URLSearchParams(valores).toString();
+    return qs ? "?" + qs : "";
   }
+
+  // --- Funcionários ---
+  getFuncionarios(params?: Record<string, string | number | boolean | undefined>) { return this.request<any>("/funcionarios" + this.query(params)); }
+  getFuncionariosAtivos() { return this.request<any[]>("/funcionarios/ativos"); }
+  getFuncionario(id: string) { return this.request<any>("/funcionarios/" + id); }
+  cadastrarFuncionario(body: any) { return this.request<any>("/funcionarios", { method: "POST", body: JSON.stringify(body) }); }
+  atualizarFuncionario(id: string, body: any) { return this.request<any>("/funcionarios/" + id, { method: "PATCH", body: JSON.stringify(body) }); }
+  desativarFuncionario(id: string) { return this.request<any>("/funcionarios/" + id, { method: "DELETE" }); }
+
+  // --- Fornecedores ---
+  getFornecedores(params?: Record<string, string | number | boolean | undefined>) { return this.request<any>("/fornecedores" + this.query(params)); }
   getFornecedor(id: string) {
     return this.request<any>(`/fornecedores/${id}`);
   }

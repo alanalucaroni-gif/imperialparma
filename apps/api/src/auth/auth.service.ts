@@ -12,10 +12,12 @@ export class AuthService {
   constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
 
   async login(dto: LoginDto) {
-    const usuario = await this.prisma.usuario.findUnique({ where: { email: dto.email.toLowerCase() } });
+    const identificador = dto.email.trim().toLowerCase();
+    const usuario = await this.prisma.usuario.findFirst({ where: { OR: [{ email: identificador }, { login: identificador }] } });
     if (!usuario?.ativo || !(await compare(dto.senha, usuario.senhaHash))) {
       throw new UnauthorizedException("E-mail ou senha inválidos.");
     }
+    await this.prisma.usuario.update({ where: { id: usuario.id }, data: { ultimoAcesso: new Date() } });
     return this.issueTokens(usuario);
   }
 
