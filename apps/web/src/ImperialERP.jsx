@@ -8674,7 +8674,7 @@ function Receitas({ receitas, produtos, categorias, fichas, estoqueItens, onCada
       </div>
 
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
-        {[["produtos", "Produtos"], ["novo_item", itemEditandoCod ? "Editar item" : produtoForm.id ? "Editar produto" : "Adicionar item"], ["categorias", "Categorias"], ["fichas", "Fichas técnicas"], ["editor_ficha", fichaEditandoId ? "Editar ficha" : "Cadastrar ficha"], ["producao", "Receitas de produção"]].map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={cx("px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap", tab === key ? "border-[#7A1420] text-[#7A1420] dark:text-red-300" : "border-transparent text-slate-400")}>{label}</button>)}
+        {[["produtos", "Produtos"], ["novo_item", itemEditandoCod ? "Editar item" : produtoForm.id ? "Editar produto" : "Adicionar item"], ["categorias", "Categorias"], ["fichas", "Fichas técnicas"], ["editor_ficha", fichaEditandoId ? "Editar ficha" : "Cadastrar ficha"]].map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={cx("px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap", tab === key ? "border-[#7A1420] text-[#7A1420] dark:text-red-300" : "border-transparent text-slate-400")}>{label}</button>)}
       </div>
 
       {feedback && <div className={cx("rounded-xl border px-4 py-3 text-sm", feedback.tone === "green" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300" : feedback.tone === "red" ? "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300" : "border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-300")}>{feedback.text}</div>}
@@ -11868,8 +11868,8 @@ export default function ImperialERP() {
 {active === "receitas" && (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-700/40 w-fit">
-                  <button onClick={() => setAbaReceitas("cadastros")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "cadastros" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Produtos, itens e fichas técnicas</button>
-                  <button onClick={() => setAbaReceitas("producao")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "producao" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Receitas de produção</button>
+                  <button onClick={() => setAbaReceitas("cadastros")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "cadastros" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Produtos, itens e fichas de venda</button>
+                  <button onClick={() => setAbaReceitas("producao")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "producao" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Receitas para a Cozinha</button>
                 </div>
                 {abaReceitas === "cadastros" ? (
                   <Receitas
