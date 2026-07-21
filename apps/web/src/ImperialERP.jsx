@@ -11888,7 +11888,7 @@ export default function ImperialERP() {
                 ) : <ReceitasProducao />}
               </div>
             )}
-            {active === "producao" && <Producao receitas={initialReceitas} estoqueItens={estoqueItens} ordens={ordens} onCriarOrdem={handleCriarOrdem} onAvancarOrdem={handleAvancarOrdem} />}
+            {active === "producao" && <ReceitasProducao modoCozinha />}
             {active === "vendas" && <Vendas />}
             {active === "entregas" && <Entregas entregadores={entregadores} tarifas={tarifasMoto} corridas={corridas} caixaAberto={caixas.find(c => c.status === "aberto")} onCadastrar={handleCadastrarEntregador} onLancarLote={handleLancarLoteCorridas} onSalvarTarifa={handleSalvarTarifa} />}
             {active === "operacional" && <Operacional erros={errosOperacionais} cancelamentos={cancelamentos} fichas={fichas} estoqueItens={estoqueItens} caixaAberto={caixas.find(c => c.status === "aberto")} onRegistrarErro={handleRegistrarErro} onRegistrarCancelamento={handleRegistrarCancelamento} />}
