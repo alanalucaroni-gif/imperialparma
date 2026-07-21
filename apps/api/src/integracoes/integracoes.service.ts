@@ -10,6 +10,7 @@ type WhatsappMetadados = {
   phoneNumberId: string;
   graphVersion: string;
   templateName: string;
+  pedidoTemplateName: string;
   templateLanguage: string;
 };
 
@@ -115,6 +116,7 @@ export class IntegracoesService {
       phoneNumberId,
       graphVersion: process.env.WHATSAPP_GRAPH_VERSION?.trim() || "v24.0",
       templateName: process.env.WHATSAPP_COTACAO_TEMPLATE?.trim() || "cotacao_fornecedor",
+      pedidoTemplateName: process.env.WHATSAPP_PEDIDO_TEMPLATE?.trim() || "pedido_compra",
       templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "pt_BR",
       verifyToken: process.env.WHATSAPP_VERIFY_TOKEN?.trim() || "",
       appSecret: process.env.WHATSAPP_APP_SECRET?.trim() || "",
@@ -134,6 +136,7 @@ export class IntegracoesService {
           phoneNumberId: metadados.phoneNumberId,
           graphVersion: metadados.graphVersion || "v24.0",
           templateName: metadados.templateName || "cotacao_fornecedor",
+          pedidoTemplateName: metadados.pedidoTemplateName || "pedido_compra",
           templateLanguage: metadados.templateLanguage || "pt_BR",
           accessToken: segredos.accessToken,
           verifyToken: segredos.verifyToken || "",
@@ -164,6 +167,7 @@ export class IntegracoesService {
         phoneNumberId: configuracao.phoneNumberId,
         graphVersion: configuracao.graphVersion,
         templateName: configuracao.templateName,
+        pedidoTemplateName: configuracao.pedidoTemplateName,
         templateLanguage: configuracao.templateLanguage,
         possuiAccessToken: Boolean(configuracao.accessToken),
         possuiVerifyToken: Boolean(configuracao.verifyToken),
@@ -180,6 +184,7 @@ export class IntegracoesService {
       phoneNumberId: ambiente?.phoneNumberId || "",
       graphVersion: ambiente?.graphVersion || "v24.0",
       templateName: ambiente?.templateName || "cotacao_fornecedor",
+      pedidoTemplateName: ambiente?.pedidoTemplateName || "pedido_compra",
       templateLanguage: ambiente?.templateLanguage || "pt_BR",
       possuiAccessToken: Boolean(ambiente?.accessToken),
       possuiVerifyToken: Boolean(ambiente?.verifyToken),
@@ -204,6 +209,7 @@ export class IntegracoesService {
       phoneNumberId: dto.phoneNumberId.trim(),
       graphVersion: dto.graphVersion.trim(),
       templateName: dto.templateName.trim(),
+      pedidoTemplateName: dto.pedidoTemplateName?.trim() || "pedido_compra",
       templateLanguage: dto.templateLanguage.trim(),
     } satisfies WhatsappMetadados);
     const segredo = this.cifrar(JSON.stringify({ accessToken, verifyToken, appSecret } satisfies WhatsappSegredos));

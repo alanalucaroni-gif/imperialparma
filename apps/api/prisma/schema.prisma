@@ -83,6 +83,9 @@ enum CotacaoStatus {
 enum ParticipacaoCotacaoStatus {
   LINK_NAO_ENVIADO
   ENVIADO
+  ENTREGUE
+  VISUALIZADO
+  FALHA
   LINK_ACESSADO
   FORMULARIO_INICIADO
   RASCUNHO_SALVO
@@ -234,6 +237,7 @@ model Fornecedor {
   formaPagamento  String?
   prazoPagamento  Int?
   observacao       String?
+  avaliacao        Decimal?            @db.Decimal(3, 2)
   ativo          Boolean             @default(true)
   pedidos        PedidoCompra[]
   propostas      CotacaoFornecedor[]
@@ -320,6 +324,8 @@ model ContaPagar {
   entradaBoleto  EntradaBoleto?  @relation(fields: [entradaBoletoId], references: [id])
   notaFiscalId   String?
   notaFiscal     NotaFiscalXml?  @relation(fields: [notaFiscalId], references: [id])
+  pedidoCompraId String?          @unique
+  pedidoCompra   PedidoCompra?    @relation(fields: [pedidoCompraId], references: [id], onDelete: SetNull)
   criadoEm       DateTime        @default(now())
   atualizadoEm   DateTime        @updatedAt
   @@index([status, vencimento])
@@ -461,6 +467,7 @@ model PedidoCompra {
   valorTotal          Decimal             @db.Decimal(14, 2)
   frete               Decimal             @default(0) @db.Decimal(14, 2)
   desconto            Decimal             @default(0) @db.Decimal(14, 2)
+  acrescimos          Decimal             @default(0) @db.Decimal(14, 2)
   condicaoPagamento   String?
   formaPagamento      String?
   dataPrevistaEntrega DateTime?
@@ -473,6 +480,9 @@ model PedidoCompra {
   pdfArquivo          Bytes?
   pdfNome             String?
   pdfGeradoEm         DateTime?
+  pdfEnviadoWhatsappEm DateTime?
+  pdfWhatsappMensagemId String?
+  contaPagar          ContaPagar?
   itens               PedidoCompraItem[]
   recebimentos        RecebimentoCompra[]
   criadoEm            DateTime            @default(now())
@@ -561,9 +571,17 @@ model CotacaoFornecedor {
   prazoDias           Int?
   frete               Decimal?                  @db.Decimal(14, 2)
   desconto            Decimal?                  @db.Decimal(14, 2)
+  acrescimos          Decimal?                  @db.Decimal(14, 2)
+  valorMinimoPedido   Decimal?                  @db.Decimal(14, 2)
+  freteGratisAcima    Decimal?                  @db.Decimal(14, 2)
   condicoes           String?
   formaPagamento      String?
   prazoPagamento      Int?
+  detalhesPagamento   Json?
+  diasEntrega         String[]                  @default([])
+  periodoEntrega      String?
+  dataMaisProximaEntrega DateTime?
+  dataLimitePedido    DateTime?
   validadeProposta    DateTime?
   impostoIncluso      Boolean?
   responsavelNome     String?
@@ -574,6 +592,9 @@ model CotacaoFornecedor {
   whatsappMensagemId  String?                   @unique
   numeroWhatsappEnvio String?
   enviadaEm           DateTime?
+  entregueEm          DateTime?
+  visualizadaEm       DateTime?
+  falhaEnvio          String?
   acessadaEm          DateTime?
   iniciadaEm          DateTime?
   rascunhoEm          DateTime?
@@ -605,6 +626,7 @@ model CotacaoItemProposta {
   embalagem           String?
   quantidadeEmbalagem Decimal?          @db.Decimal(14, 3)
   quantidadeMinima    Decimal?          @db.Decimal(14, 3)
+  quantidadeMinimaEmbalagem Decimal?     @db.Decimal(14, 3)
   prazoDias           Int?
   dataPrevistaEntrega DateTime?
   observacoes         String?

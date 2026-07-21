@@ -167,6 +167,7 @@ class ImperialApi {
     if (!response.ok) throw new Error("Nao foi possivel abrir o PDF do pedido.");
     return response.blob();
   }
+  enviarPdfPedidoWhatsapp(id: string) { return this.request<any>(`/cotacoes/pedidos/${id}/enviar-whatsapp`, { method: "POST" }); }
   getFornecedoresCotacao() { return this.request<any>("/cotacoes/fornecedores/ativos"); }
   cadastrarFornecedorCotacao(body: any) { return this.request<any>("/cotacoes/fornecedores", { method: "POST", body: JSON.stringify(body) }); }
   criarCotacaoInteligente(body: any) { return this.request<any>("/cotacoes", { method: "POST", body: JSON.stringify(body) }); }

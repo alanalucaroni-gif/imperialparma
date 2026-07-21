@@ -9,7 +9,7 @@ import { AppModule } from "./app.module.js";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
-  app.useBodyParser("json", { limit: "8mb" });
+  app.useBodyParser("json", { limit: "12mb" });
   app.setGlobalPrefix("api");
 
   let webDist = join(process.cwd(), "apps", "web", "dist");

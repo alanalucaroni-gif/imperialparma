@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUrl, Min, MinLength } from "class-validator";
+import { IsBoolean, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUrl, Max, Min, MinLength } from "class-validator";
 import { PageDto } from "../common/page.dto.js";
 
 export class ListarFornecedoresDto extends PageDto {
@@ -29,6 +29,7 @@ export class CriarFornecedorDto {
   @IsOptional() @IsString() categoria?: string;
   @IsOptional() @IsString() formaPagamento?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) prazoPagamento?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) @Max(5) avaliacao?: number;
   @IsOptional() @IsBoolean() ativo?: boolean;
   @IsOptional() @IsString() observacao?: string;
 }

@@ -9,6 +9,7 @@ export class SalvarWhatsappMetaDto {
   @IsString() @MinLength(5) phoneNumberId!: string;
   @IsString() @Matches(/^v\d+\.\d+$/) graphVersion!: string;
   @IsString() @MinLength(3) templateName!: string;
+  @IsOptional() @IsString() @MinLength(3) pedidoTemplateName?: string;
   @IsString() @MinLength(2) templateLanguage!: string;
   @IsOptional() @IsString() @MinLength(20) accessToken?: string;
   @IsOptional() @IsString() @MinLength(8) verifyToken?: string;

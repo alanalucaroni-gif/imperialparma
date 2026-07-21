@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
+import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
 
 export class CotacaoItemSolicitadoDto {
   @IsString() insumoCodigo!: string;
@@ -29,6 +29,7 @@ export class PropostaItemDto {
   @IsOptional() @IsString() embalagem?: string;
   @IsOptional() @IsNumber() @Min(0) quantidadeEmbalagem?: number;
   @IsOptional() @IsNumber() @Min(0) quantidadeMinima?: number;
+  @IsOptional() @IsNumber() @Min(0) quantidadeMinimaEmbalagem?: number;
   @IsOptional() @IsInt() @Min(0) prazoDias?: number;
   @IsOptional() @IsDateString() dataPrevistaEntrega?: string;
   @IsOptional() @IsString() @MaxLength(1000) observacoes?: string;
@@ -46,10 +47,18 @@ export class RespostaPublicaCotacaoDto {
   itens!: PropostaItemDto[];
   @IsOptional() @IsNumber() @Min(0) frete?: number;
   @IsOptional() @IsNumber() @Min(0) desconto?: number;
+  @IsOptional() @IsNumber() @Min(0) acrescimos?: number;
+  @IsOptional() @IsNumber() @Min(0) valorMinimoPedido?: number;
+  @IsOptional() @IsNumber() @Min(0) freteGratisAcima?: number;
   @IsOptional() @IsString() condicaoPagamento?: string;
-  @IsOptional() @IsString() formaPagamento?: string;
+  @IsOptional() @IsIn(["PIX", "BOLETO", "CARTAO"]) formaPagamento?: string;
+  @IsOptional() @IsObject() detalhesPagamento?: Record<string, unknown>;
   @IsOptional() @IsInt() @Min(0) prazoPagamento?: number;
   @IsOptional() @IsDateString() validadeProposta?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) diasEntrega?: string[];
+  @IsOptional() @IsIn(["MANHA", "TARDE", "NOITE", "HORARIO_COMERCIAL", "A_COMBINAR"]) periodoEntrega?: string;
+  @IsOptional() @IsDateString() dataMaisProximaEntrega?: string;
+  @IsOptional() @IsDateString() dataLimitePedido?: string;
   @IsOptional() @IsString() responsavelNome?: string;
   @IsOptional() @IsString() responsavelTelefone?: string;
   @IsOptional() @IsString() @MaxLength(3000) observacoesGerais?: string;
