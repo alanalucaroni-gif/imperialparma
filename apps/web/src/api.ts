@@ -131,6 +131,8 @@ class ImperialApi {
   getProducaoReceita(id: string) { return this.request<any>("/producoes-receitas/" + id); }
   cadastrarProducaoReceita(body: any) { return this.request<any>("/producoes-receitas", { method: "POST", body: JSON.stringify(body) }); }
   atualizarProducaoReceita(id: string, body: any) { return this.request<any>("/producoes-receitas/" + id, { method: "PATCH", body: JSON.stringify(body) }); }
+  processarEstoqueProducao(id: string) { return this.request<any>("/producoes-receitas/" + id + "/processar-estoque", { method: "POST" }); }
+  estornarProducaoReceita(id: string, motivo: string) { return this.request<any>("/producoes-receitas/" + id, { method: "DELETE", body: JSON.stringify({ motivo }) }); }
   cancelarProducaoReceita(id: string, motivo: string) { return this.request<any>("/producoes-receitas/" + id + "/cancelar", { method: "POST", body: JSON.stringify({ motivo }) }); }
   pausarProducaoReceita(id: string) { return this.request<any>("/producoes-receitas/" + id + "/pausar", { method: "POST" }); }
   continuarProducaoReceita(id: string) { return this.request<any>("/producoes-receitas/" + id + "/continuar", { method: "POST" }); }

@@ -10979,6 +10979,7 @@ export default function ImperialERP() {
   }
 
   useEffect(() => { syncFromApi(); }, []);
+  useEffect(() => { if (active === "estoque") syncFromApi(); }, [active]);
 
   function persistirItensEstoquePersonalizados(itens) {
     try {
@@ -11869,7 +11870,7 @@ export default function ImperialERP() {
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-700/40 w-fit">
                   <button onClick={() => setAbaReceitas("cadastros")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "cadastros" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Produtos, itens e fichas de venda</button>
-                  <button onClick={() => setAbaReceitas("producao")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "producao" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Receitas para a Cozinha</button>
+                  <button onClick={() => setAbaReceitas("producao")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "producao" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Receitas e ordens de produ&ccedil;&atilde;o</button>
                 </div>
                 {abaReceitas === "cadastros" ? (
                   <Receitas
@@ -11885,10 +11886,10 @@ export default function ImperialERP() {
                     onSalvarCategoria={handleSalvarCategoria}
                     onSalvarFicha={handleSalvarFicha}
                   />
-                ) : <ReceitasProducao />}
+                ) : <ReceitasProducao onEstoqueAlterado={syncFromApi} />}
               </div>
             )}
-            {active === "producao" && <ReceitasProducao modoCozinha />}
+            {active === "producao" && <ReceitasProducao modoCozinha onEstoqueAlterado={syncFromApi} />}
             {active === "vendas" && <Vendas />}
             {active === "entregas" && <Entregas entregadores={entregadores} tarifas={tarifasMoto} corridas={corridas} caixaAberto={caixas.find(c => c.status === "aberto")} onCadastrar={handleCadastrarEntregador} onLancarLote={handleLancarLoteCorridas} onSalvarTarifa={handleSalvarTarifa} />}
             {active === "operacional" && <Operacional erros={errosOperacionais} cancelamentos={cancelamentos} fichas={fichas} estoqueItens={estoqueItens} caixaAberto={caixas.find(c => c.status === "aberto")} onRegistrarErro={handleRegistrarErro} onRegistrarCancelamento={handleRegistrarCancelamento} />}

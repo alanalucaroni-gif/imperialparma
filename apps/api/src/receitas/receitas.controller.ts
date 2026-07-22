@@ -37,6 +37,8 @@ export class ProducoesReceitasController {
   @Get(":id") @Permissions("receitas.visualizar") buscar(@Param("id") id: string) { return this.receitas.buscarProducao(id); }
   @Post() @Permissions("receitas.criar") criar(@Body() dto: CriarProducaoReceitaDto) { return this.receitas.criarProducao(dto); }
   @Patch(":id") @Permissions("receitas.editar") atualizar(@Param("id") id: string, @Body() dto: AtualizarProducaoReceitaDto) { return this.receitas.atualizarProducao(id, dto); }
+  @Post(":id/processar-estoque") @Permissions("receitas.editar") processarEstoque(@Param("id") id: string) { return this.receitas.processarEstoquePendente(id); }
+  @Delete(":id") @Permissions("receitas.excluir") estornar(@Param("id") id: string, @Body() dto: CancelarProducaoReceitaDto) { return this.receitas.estornarProducao(id, dto.motivo); }
   @Post(":id/cancelar") @Permissions("receitas.editar") cancelar(@Param("id") id: string, @Body() dto: CancelarProducaoReceitaDto) { return this.receitas.cancelarProducao(id, dto.motivo); }
   @Post(":id/pausar") @Permissions("receitas.editar") pausar(@Param("id") id: string) { return this.receitas.pausarProducao(id); }
   @Post(":id/continuar") @Permissions("receitas.editar") continuar(@Param("id") id: string) { return this.receitas.continuarProducao(id); }

@@ -139,6 +139,69 @@ export class ReceitasService {
     return this.mapearProducao(producao);
   }
 
+  async processarEstoquePendente(id: string) {
+    const atual = await this.buscarProducao(id);
+    if (atual.status !== ProducaoReceitaStatus.CONCLUIDA) throw new BadRequestException("Somente ordens conclu\u00eddas podem processar o estoque.");
+    if (atual.estoqueProcessadoEm) return atual;
+    const producao = await this.prisma.$transaction(async tx => {
+      await this.processarEstoqueProducao(tx, id);
+      return tx.producaoReceita.findUniqueOrThrow({ where: { id }, include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, rendimento: true, unidadeRendimento: true, tempoPreparoMinutos: true, produtoFinalId: true, produtoFinal: { select: { id: true, codigo: true, nome: true, unidade: true, quantidade: true, ativo: true } } } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
+    });
+    return this.mapearProducao(producao);
+  }
+
+  async estornarProducao(id: string, motivo: string) {
+    const atual = await this.buscarProducao(id);
+    if (atual.status === ProducaoReceitaStatus.CANCELADA) throw new BadRequestException("Esta ordem j\u00e1 foi exclu\u00edda ou cancelada.");
+    if (atual.status !== ProducaoReceitaStatus.CONCLUIDA) throw new BadRequestException("Use o cancelamento para ordens que ainda n\u00e3o foram conclu\u00eddas.");
+    const motivoLimpo = motivo.trim();
+    const producao = await this.prisma.$transaction(async tx => {
+      const marcada = await tx.producaoReceita.updateMany({
+        where: { id, status: ProducaoReceitaStatus.CONCLUIDA },
+        data: { status: ProducaoReceitaStatus.CANCELADA, canceladaEm: new Date(), motivoCancelamento: motivoLimpo },
+      });
+      if (!marcada.count) throw new BadRequestException("A ordem j\u00e1 foi alterada e n\u00e3o pode ser estornada novamente.");
+      const ordemMarcada = await tx.producaoReceita.findUniqueOrThrow({ where: { id } });
+
+      if (ordemMarcada.estoqueProcessadoEm) {
+        const movimentos = await tx.movimentacao.findMany({
+          where: { origem: EntradaOrigem.PRODUCAO, tipo: MovimentacaoTipo.PRODUCAO, referenciaId: id },
+          orderBy: { criadoEm: "desc" },
+        });
+        if (!movimentos.length) throw new BadRequestException("As movimenta\u00e7\u00f5es desta ordem n\u00e3o foram localizadas. Fa\u00e7a uma confer\u00eancia antes do estorno.");
+
+        for (const movimento of movimentos) {
+          const insumo = await tx.insumo.findUnique({ where: { id: movimento.insumoId } });
+          if (!insumo) throw new BadRequestException("Um item movimentado por esta ordem n\u00e3o existe mais no estoque.");
+          const saldoAnterior = numero(insumo.quantidade);
+          const quantidadeEstorno = -numero(movimento.quantidade);
+          const saldoPosterior = Number((saldoAnterior + quantidadeEstorno).toFixed(3));
+
+          if (quantidadeEstorno < 0) {
+            const quantidadeSaida = Math.abs(quantidadeEstorno);
+            const removido = await tx.insumo.updateMany({ where: { id: insumo.id, quantidade: { gte: quantidadeSaida } }, data: { quantidade: { decrement: quantidadeSaida } } });
+            if (!removido.count) throw new BadRequestException("N\u00e3o h\u00e1 saldo suficiente de " + insumo.nome + " para retirar o produto final deste estorno.");
+            if (saldoPosterior > 0 && movimento.custoUnitario != null) {
+              const valorRestante = Math.max(0, saldoAnterior * numero(insumo.custoUnitario) - quantidadeSaida * numero(movimento.custoUnitario));
+              await tx.insumo.update({ where: { id: insumo.id }, data: { custoUnitario: valorRestante / saldoPosterior } });
+            }
+          } else if (quantidadeEstorno > 0) {
+            await tx.insumo.update({ where: { id: insumo.id }, data: { quantidade: { increment: quantidadeEstorno } } });
+          }
+
+          await tx.movimentacao.create({ data: {
+            insumoId: insumo.id, tipo: MovimentacaoTipo.AJUSTE, origem: EntradaOrigem.PRODUCAO,
+            quantidade: quantidadeEstorno, saldoAnterior, saldoPosterior, custoUnitario: movimento.custoUnitario,
+            referenciaId: id, descricao: "Estorno da ordem de produ\u00e7\u00e3o: " + motivoLimpo,
+          } });
+        }
+      }
+
+      return tx.producaoReceita.findUniqueOrThrow({ where: { id }, include: { receita: { select: { id: true, codigo: true, nome: true, categoria: true, tempoPreparoMinutos: true } }, funcionario: { select: { id: true, codigo: true, nome: true, setor: true, cargo: true, ativo: true } } } });
+    });
+    return this.mapearProducao(producao);
+  }
+
   async pausarProducao(id: string) {
     const atual = await this.buscarProducao(id);
     if (atual.status !== ProducaoReceitaStatus.EM_ANDAMENTO) throw new BadRequestException("Somente produções em andamento podem ser pausadas.");
@@ -231,8 +294,9 @@ export class ReceitasService {
 
   private async prepararItens(itens: ItemReceitaDto[]) {
     if (!itens.length) throw new BadRequestException("Inclua pelo menos um ingrediente na receita.");
+    if (itens.some(item => !item.insumoId)) throw new BadRequestException("Vincule todos os ingredientes a itens do estoque para permitir a baixa autom\u00e1tica.");
     const ids = [...new Set(itens.map(item => item.insumoId).filter((id): id is string => Boolean(id)))]; const insumos = ids.length ? await this.prisma.insumo.findMany({ where: { id: { in: ids } } }) : []; const porId = new Map(insumos.map(item => [item.id, item]));
-    return itens.map(item => { const insumo = item.insumoId ? porId.get(item.insumoId) : undefined; if (item.insumoId && !insumo) throw new BadRequestException("Um dos ingredientes selecionados não existe mais no estoque."); return { insumoId: item.insumoId || null, nome: (item.nome || insumo?.nome || "").trim(), quantidade: item.quantidade, unidade: (item.unidade || insumo?.unidade || "").trim().toLowerCase(), custoUnitario: item.custoUnitario ?? (insumo ? numero(insumo.custoUnitario) : null) }; });
+    return itens.map(item => { const insumo = item.insumoId ? porId.get(item.insumoId) : undefined; if (item.insumoId && !insumo) throw new BadRequestException("Um dos ingredientes selecionados não existe mais no estoque."); return { insumoId: item.insumoId || null, nome: (item.nome || insumo?.nome || "").trim(), quantidade: item.quantidade, unidade: (insumo?.unidade || item.unidade || "").trim().toLowerCase(), custoUnitario: item.custoUnitario ?? (insumo ? numero(insumo.custoUnitario) : null) }; });
   }
 
   private async processarEstoqueProducao(tx: Prisma.TransactionClient, producaoId: string) {
@@ -242,7 +306,10 @@ export class ReceitasService {
     });
     if (!producao) throw new NotFoundException("Produção não encontrada.");
     if (producao.estoqueProcessadoEm) return;
+    if (producao.status !== ProducaoReceitaStatus.CONCLUIDA) throw new BadRequestException("A ordem precisa estar conclu\u00edda antes da movimenta\u00e7\u00e3o do estoque.");
     const receita = producao.receita;
+    const itensSemEstoque = receita.itens.filter(item => !item.insumoId);
+    if (itensSemEstoque.length) throw new BadRequestException("Vincule todos os ingredientes da receita ao estoque antes de concluir: " + itensSemEstoque.map(item => item.nome).slice(0, 3).join(", "));
     const produtoFinal = receita.produtoFinal;
     if (!produtoFinal?.ativo) throw new BadRequestException("Vincule a receita a um produto final ativo no estoque antes de concluir.");
     if (produtoFinal.unidade.trim().toLowerCase() !== producao.unidade.trim().toLowerCase()) throw new BadRequestException("A unidade produzida deve ser igual à unidade do produto final no estoque: " + produtoFinal.unidade + ".");
