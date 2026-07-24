@@ -7976,7 +7976,6 @@ const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "estoque", label: "Estoque", icon: Package },
   { key: "receitas", label: "Receitas de Produção", icon: FlaskConical },
-  { key: "producao", label: "Cozinha / Preparo", icon: ChefHat },
   { key: "compras", label: "Compras", icon: Truck },
   { key: "usuarios", label: "Usuários", icon: Users },
   { key: "vendas", label: "Pedidos / Vendas", icon: ShoppingCart },
@@ -10862,7 +10861,7 @@ function Fornecedores() {
 export default function ImperialERP() {
   const [dark, setDark] = useState(true);
   const [active, setActive] = useState("dashboard");
-  const [abaReceitas, setAbaReceitas] = useState("cadastros");
+  const [abaReceitas, setAbaReceitas] = useState("producao");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [estoqueItens, setEstoqueItens] = useState(() => {
     try {
@@ -11869,8 +11868,8 @@ export default function ImperialERP() {
 {active === "receitas" && (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-700/40 w-fit">
+                  <button onClick={() => setAbaReceitas("producao")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "producao" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Receitas e ordens de preparo</button>
                   <button onClick={() => setAbaReceitas("cadastros")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "cadastros" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Produtos, itens e fichas de venda</button>
-                  <button onClick={() => setAbaReceitas("producao")} className={cx("rounded-lg px-4 py-2 text-sm font-medium", abaReceitas === "producao" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500")}>Receitas e ordens de produ&ccedil;&atilde;o</button>
                 </div>
                 {abaReceitas === "cadastros" ? (
                   <Receitas
@@ -11889,7 +11888,6 @@ export default function ImperialERP() {
                 ) : <ReceitasProducao onEstoqueAlterado={syncFromApi} />}
               </div>
             )}
-            {active === "producao" && <ReceitasProducao modoCozinha onEstoqueAlterado={syncFromApi} />}
             {active === "vendas" && <Vendas />}
             {active === "entregas" && <Entregas entregadores={entregadores} tarifas={tarifasMoto} corridas={corridas} caixaAberto={caixas.find(c => c.status === "aberto")} onCadastrar={handleCadastrarEntregador} onLancarLote={handleLancarLoteCorridas} onSalvarTarifa={handleSalvarTarifa} />}
             {active === "operacional" && <Operacional erros={errosOperacionais} cancelamentos={cancelamentos} fichas={fichas} estoqueItens={estoqueItens} caixaAberto={caixas.find(c => c.status === "aberto")} onRegistrarErro={handleRegistrarErro} onRegistrarCancelamento={handleRegistrarCancelamento} />}

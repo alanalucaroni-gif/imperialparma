@@ -261,7 +261,7 @@ export class ReceitasService {
   }
   async ranking(dto: RankingProducoesDto) {
     const todas = await this.buscarParaAnalise(dto, false);
-    const producoes = todas.filter(item => item.status !== ProducaoReceitaStatus.CANCELADA);
+    const producoes = todas.filter(item => item.status === ProducaoReceitaStatus.CONCLUIDA);
     const totalVolume = producoes.reduce((total, item) => total + numero(item.quantidadeProduzida), 0);
     const grupos = this.agrupar(producoes, item => item.funcionarioId);
     const ranking = Array.from(grupos.values()).map(itens => {
