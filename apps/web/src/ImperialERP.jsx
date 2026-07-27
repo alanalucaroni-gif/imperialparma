@@ -5,6 +5,7 @@ import { api } from "./api";
 import CadastroPessoas from "./CadastroPessoas.jsx";
 import ReceitasProducao from "./ReceitasProducao.jsx";
 import ComprasCotacoes from "./ComprasCotacoes.jsx";
+import EntregasMotos from "./EntregasMotos.jsx";
 import {
   LayoutDashboard, Package, FlaskConical, ChefHat, ShoppingCart,
   Truck, Users, UserCircle2, Wallet, BarChart3, Settings, Plug,
@@ -10939,7 +10940,27 @@ export default function ImperialERP() {
   const [ordens, setOrdens] = useState(initialOrdensPreparo);
   const [caixas, setCaixas] = useState(initialCaixas);
   const [movimentosCaixa, setMovimentosCaixa] = useState(initialMovimentosCaixa);
-  const [entregadores, setEntregadores] = useState(initialEntregadores);
+  const [entregadores, setEntregadores] = useState(() => {
+    try {
+      const salvos = JSON.parse(localStorage.getItem("imperial.deliveryPeople.v1") || "null");
+      return Array.isArray(salvos) ? salvos : initialEntregadores;
+    } catch {
+      return initialEntregadores;
+    }
+  });
+  const [empresasEntrega, setEmpresasEntrega] = useState(() => {
+    const padrao = [...new Set([
+      ...initialEntregadores.map(item => item.tipo),
+      ...initialTarifasMoto.flatMap(item => Object.keys(item.valores || {})),
+      "Particular",
+    ])];
+    try {
+      const salvas = JSON.parse(localStorage.getItem("imperial.deliveryCompanies.v1") || "null");
+      return Array.isArray(salvas) && salvas.length ? [...new Set([...padrao, ...salvas])] : padrao;
+    } catch {
+      return padrao;
+    }
+  });
   const [tarifasMoto, setTarifasMoto] = useState(() => {
     try {
       const salvas = JSON.parse(localStorage.getItem("imperial.deliveryRates.v1") || "null");
@@ -10948,7 +10969,14 @@ export default function ImperialERP() {
       return initialTarifasMoto;
     }
   });
-  const [corridas, setCorridas] = useState(initialCorridas);
+  const [corridas, setCorridas] = useState(() => {
+    try {
+      const salvas = JSON.parse(localStorage.getItem("imperial.deliveryRuns.v1") || "null");
+      return Array.isArray(salvas) ? salvas : initialCorridas;
+    } catch {
+      return initialCorridas;
+    }
+  });
   const [errosOperacionais, setErrosOperacionais] = useState(initialErrosOperacionais);
   const [cancelamentos, setCancelamentos] = useState(initialCancelamentos);
   const [fechamentosDiarios, setFechamentosDiarios] = useState(initialFechamentosDiarios);
@@ -11508,9 +11536,49 @@ export default function ImperialERP() {
   function handleCadastrarEntregador({ nome, telefone, tipo }) {
     const jaExiste = entregadores.some(e => normalizeTxt(e.nome) === normalizeTxt(nome) && e.tipo === tipo);
     if (jaExiste) return { tone: "red", text: `Já existe um entregador com esse nome vinculado à ${tipo}.` };
-    const novo = { id: `ENT-${String(entregadores.length + 1).padStart(3, "0")}`, nome, telefone, tipo, ativo: true };
-    setEntregadores(prev => [...prev, novo]);
+    const novo = { id: `ENT-${Date.now()}`, nome, telefone, tipo, ativo: true };
+    setEntregadores(prev => salvarCadastroLocal("imperial.deliveryPeople.v1", [...prev, novo]));
     return { tone: "green", text: `${nome} cadastrado na empresa ${tipo}.` };
+  }
+
+  function handleAtualizarEntregador({ id, nome, telefone, tipo, ativo }) {
+    const atual = entregadores.find(item => item.id === id);
+    if (!atual) return { tone: "red", text: "Entregador não encontrado." };
+    const duplicado = entregadores.some(item =>
+      item.id !== id
+      && normalizeTxt(item.nome) === normalizeTxt(nome)
+      && normalizeTxt(item.tipo) === normalizeTxt(tipo)
+    );
+    if (duplicado) return { tone: "red", text: `Já existe um entregador com esse nome vinculado à ${tipo}.` };
+    const atualizado = { ...atual, nome, telefone, tipo, ativo: Boolean(ativo) };
+    setEntregadores(prev => salvarCadastroLocal(
+      "imperial.deliveryPeople.v1",
+      prev.map(item => item.id === id ? atualizado : item),
+    ));
+    return { tone: "green", text: `${nome} foi ${atual.ativo !== Boolean(ativo) ? (ativo ? "ativado" : "inativado") : "atualizado"}.` };
+  }
+
+  function handleExcluirEntregador(id) {
+    const entregador = entregadores.find(item => item.id === id);
+    if (!entregador) return { tone: "red", text: "Entregador não encontrado." };
+    if (corridas.some(corrida => corrida.entregadorId === id)) {
+      return { tone: "amber", text: `${entregador.nome} possui corridas no histórico. Para preservar os relatórios, coloque-o como inativo.` };
+    }
+    setEntregadores(prev => salvarCadastroLocal(
+      "imperial.deliveryPeople.v1",
+      prev.filter(item => item.id !== id),
+    ));
+    return { tone: "green", text: `${entregador.nome} foi excluído.` };
+  }
+
+  function handleCadastrarEmpresa(nome) {
+    const duplicada = empresasEntrega.some(item => normalizeTxt(item) === normalizeTxt(nome));
+    if (duplicada) return { tone: "red", text: "Esta empresa já está cadastrada." };
+    setEmpresasEntrega(prev => salvarCadastroLocal(
+      "imperial.deliveryCompanies.v1",
+      [...prev, nome],
+    ));
+    return { tone: "green", text: `${nome} foi adicionada às empresas prestadoras.` };
   }
 
   function handleLancarLoteCorridas({ entregador, itens }) {
@@ -11536,10 +11604,13 @@ export default function ImperialERP() {
       bairro: item.bairro,
       valor: item.valor,
       lancadaEm: `hoje ${horario}`,
+      dataLancamento: new Date().toISOString(),
       status: "paga",
       caixaId: caixa.id,
+      origemValor: item.origemValor || "tabela",
+      avulso: Boolean(entregador.avulso),
     }));
-    setCorridas(prev => [...novasCorridas, ...prev]);
+    setCorridas(prev => salvarCadastroLocal("imperial.deliveryRuns.v1", [...novasCorridas, ...prev]));
     return { tone: "green", text: `${loteId}: ${itens.length} corrida(s) de ${entregador.nome}, total de ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, lançadas no ${caixa.id}.` };
   }
 
@@ -11889,7 +11960,21 @@ export default function ImperialERP() {
               </div>
             )}
             {active === "vendas" && <Vendas />}
-            {active === "entregas" && <Entregas entregadores={entregadores} tarifas={tarifasMoto} corridas={corridas} caixaAberto={caixas.find(c => c.status === "aberto")} onCadastrar={handleCadastrarEntregador} onLancarLote={handleLancarLoteCorridas} onSalvarTarifa={handleSalvarTarifa} />}
+            {active === "entregas" && (
+              <EntregasMotos
+                entregadores={entregadores}
+                empresas={empresasEntrega}
+                tarifas={tarifasMoto}
+                corridas={corridas}
+                caixaAberto={caixas.find(c => c.status === "aberto")}
+                onCadastrar={handleCadastrarEntregador}
+                onAtualizar={handleAtualizarEntregador}
+                onExcluir={handleExcluirEntregador}
+                onCadastrarEmpresa={handleCadastrarEmpresa}
+                onLancarLote={handleLancarLoteCorridas}
+                onSalvarTarifa={handleSalvarTarifa}
+              />
+            )}
             {active === "operacional" && <Operacional erros={errosOperacionais} cancelamentos={cancelamentos} fichas={fichas} estoqueItens={estoqueItens} caixaAberto={caixas.find(c => c.status === "aberto")} onRegistrarErro={handleRegistrarErro} onRegistrarCancelamento={handleRegistrarCancelamento} />}
             {active === "caixa" && <Caixa caixas={caixas} movimentos={movimentosCaixa} onAbrir={handleAbrirCaixa} onMovimentar={handleMovimentarCaixa} onFechar={handleFecharCaixa} />}
             {active === "compras" && (
