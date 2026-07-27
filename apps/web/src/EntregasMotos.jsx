@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import CentralLogistica from "./CentralLogistica.jsx";
 import { abrirRelatorioMotosPdf } from "./relatorioMotosPdf.js";
 import {
   BarChart3,
@@ -138,6 +139,7 @@ export default function EntregasMotos({
   onExcluir,
   onCadastrarEmpresa,
   onLancarLote,
+  onConcluirEntrega,
   onSalvarTarifa,
 }) {
   const entregadoresAtivos = useMemo(() => entregadores.filter(item => item.ativo), [entregadores]);
@@ -146,7 +148,7 @@ export default function EntregasMotos({
     [empresas],
   );
 
-  const [tab, setTab] = useState("corridas");
+  const [tab, setTab] = useState("central");
   const [feedback, setFeedback] = useState(null);
   const [modoEntregador, setModoEntregador] = useState("cadastrado");
   const [entregadorId, setEntregadorId] = useState(entregadoresAtivos[0]?.id ?? "");
@@ -497,6 +499,7 @@ export default function EntregasMotos({
 
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-700">
         {[
+          ["central", "Central de logística"],
           ["corridas", "Corridas e acertos"],
           ["entregadores", "Entregadores e empresas"],
           ["tarifas", "Tabela de bairros"],
@@ -512,6 +515,8 @@ export default function EntregasMotos({
       </div>
 
       <Feedback feedback={feedback} />
+
+      {tab === "central" && <CentralLogistica entregadores={entregadores} onConcluirEntrega={onConcluirEntrega} />}
 
       {tab === "corridas" && (
         <>

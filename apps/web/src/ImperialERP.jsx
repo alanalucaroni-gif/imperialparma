@@ -7980,7 +7980,7 @@ const NAV = [
   { key: "compras", label: "Compras", icon: Truck },
   { key: "usuarios", label: "Usuários", icon: Users },
   { key: "vendas", label: "Pedidos / Vendas", icon: ShoppingCart },
-  { key: "entregas", label: "Motos / Entregas", icon: Bike },
+  { key: "entregas", label: "Logística / Entregas", icon: Bike },
   { key: "operacional", label: "Erros / Cancelamentos", icon: AlertTriangle },
   { key: "caixa", label: "Caixa / Turnos", icon: CircleDollarSign },
   { key: "clientes", label: "Clientes", icon: Users },
@@ -10953,6 +10953,7 @@ export default function ImperialERP() {
       ...initialEntregadores.map(item => item.tipo),
       ...initialTarifasMoto.flatMap(item => Object.keys(item.valores || {})),
       "Particular",
+      "Frota Imperial",
     ])];
     try {
       const salvas = JSON.parse(localStorage.getItem("imperial.deliveryCompanies.v1") || "null");
@@ -11614,6 +11615,57 @@ export default function ImperialERP() {
     return { tone: "green", text: `${loteId}: ${itens.length} corrida(s) de ${entregador.nome}, total de ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, lançadas no ${caixa.id}.` };
   }
 
+  function handleConcluirEntregaLogistica({ pedido, entregador, custo }) {
+    const existente = corridas.find(corrida => corrida.pedidoLogisticaId === pedido.id);
+    if (existente) {
+      return { tone: "green", text: `${pedido.codigoPedido} já estava concluído e registrado nos relatórios.` };
+    }
+
+    const valor = Number(custo || 0);
+    if (!entregador || valor <= 0) {
+      return { tone: "red", text: "A entrega precisa de entregador e custo maior que zero." };
+    }
+
+    const caixa = caixas.find(item => item.status === "aberto");
+    let caixaId = null;
+    if (caixa) {
+      const resultadoCaixa = handleMovimentarCaixa({
+        tipo: "saida",
+        descricao: `Logística própria — ${pedido.codigoPedido} — ${entregador.nome}`,
+        valor,
+      });
+      if (resultadoCaixa.tone === "red") return resultadoCaixa;
+      caixaId = caixa.id;
+    }
+
+    const agora = new Date();
+    const horario = agora.toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const corrida = {
+      id: `COR-LOG-${Date.now()}`,
+      loteId: `LOG-${pedido.id}`,
+      pedido: pedido.codigoPedido,
+      pedidoLogisticaId: pedido.id,
+      entregadorId: entregador.id,
+      entregador: entregador.nome,
+      empresa: entregador.tipo || "Frota Imperial",
+      bairro: pedido.bairro,
+      valor,
+      distanciaKm: Number(pedido.distanciaKm || 0),
+      valorPedido: Number(pedido.valorPedido || 0),
+      taxaCliente: Number(pedido.taxaEntregaCliente || 0),
+      origem: "LOGISTICA_PROPRIA",
+      origemValor: "quilometro",
+      lancadaEm: `hoje ${horario}`,
+      dataLancamento: agora.toISOString(),
+      status: caixaId ? "paga" : "pendente_pagamento",
+      caixaId,
+    };
+    setCorridas(prev => salvarCadastroLocal("imperial.deliveryRuns.v1", [corrida, ...prev]));
+    return caixaId
+      ? { tone: "green", text: `${pedido.codigoPedido} entregue por ${entregador.nome}; custo de ${valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} registrado no ${caixaId}.` }
+      : { tone: "amber", text: `${pedido.codigoPedido} entregue e registrado com pagamento pendente porque não há caixa aberto.` };
+  }
+
   function handleSalvarTarifa({ bairroOriginal, bairro, valores }) {
     if (!bairro) return { tone: "red", text: "Informe o nome do bairro ou destino." };
     if (!Object.keys(valores).length) return { tone: "red", text: "Informe o preço da Moto City ou da ZUPT." };
@@ -11971,6 +12023,7 @@ export default function ImperialERP() {
                 onAtualizar={handleAtualizarEntregador}
                 onExcluir={handleExcluirEntregador}
                 onCadastrarEmpresa={handleCadastrarEmpresa}
+                onConcluirEntrega={handleConcluirEntregaLogistica}
                 onLancarLote={handleLancarLoteCorridas}
                 onSalvarTarifa={handleSalvarTarifa}
               />
