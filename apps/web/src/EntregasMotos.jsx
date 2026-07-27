@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { abrirRelatorioMotosPdf } from "./relatorioMotosPdf.js";
 import {
   BarChart3,
   Bike,
   Building2,
+  Download,
   CircleDollarSign,
   FileBarChart2,
   Filter,
@@ -254,6 +256,33 @@ export default function EntregasMotos({
   }, [corridasFiltradas]);
 
   const totalRelatorio = corridasFiltradas.reduce((total, item) => total + Number(item.valor || 0), 0);
+  const comparativoEmpresas = useMemo(() => {
+    const grupos = new Map();
+    corridasFiltradas.forEach(corrida => {
+      const nome = corrida.empresa || "Não informado";
+      const atual = grupos.get(nome) ?? { nome, corridas: 0, total: 0 };
+      atual.corridas += 1;
+      atual.total += Number(corrida.valor || 0);
+      grupos.set(nome, atual);
+    });
+    return [...grupos.values()].sort((a, b) => b.total - a.total);
+  }, [corridasFiltradas]);
+
+  const comparativoEntregadores = useMemo(() => {
+    const grupos = new Map();
+    corridasFiltradas.forEach(corrida => {
+      const nome = corrida.entregador || "Não informado";
+      const atual = grupos.get(nome) ?? { nome, corridas: 0, total: 0 };
+      atual.corridas += 1;
+      atual.total += Number(corrida.valor || 0);
+      grupos.set(nome, atual);
+    });
+    return [...grupos.values()].sort((a, b) => b.total - a.total);
+  }, [corridasFiltradas]);
+
+  const maiorEmpresa = comparativoEmpresas[0]?.total || 1;
+  const maiorEntregador = comparativoEntregadores[0]?.total || 1;
+
 
   function bloquearTroca() {
     if (!lista.length) return false;
@@ -433,7 +462,22 @@ export default function EntregasMotos({
     setFiltroEntregador("");
   }
 
+  function gerarPdfRelatorio() {
+    const resultado = abrirRelatorioMotosPdf({
+      corridas: corridasFiltradas,
+      filtros: {
+        inicio: filtroInicio,
+        fim: filtroFim,
+        bairro: filtroBairro,
+        empresa: filtroEmpresa,
+        entregador: filtroEntregador,
+      },
+    });
+    setFeedback(resultado);
+  }
+
   return (
+
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -690,6 +734,9 @@ export default function EntregasMotos({
             <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <label className="text-xs text-slate-500">Data inicial<input type="date" value={filtroInicio} onChange={evento => setFiltroInicio(evento.target.value)} className={inputClass} /></label>
               <label className="text-xs text-slate-500">Data final<input type="date" value={filtroFim} onChange={evento => setFiltroFim(evento.target.value)} className={inputClass} /></label>
+            <div className="mb-4 flex justify-end">
+              <button type="button" onClick={gerarPdfRelatorio} disabled={!corridasFiltradas.length} className={primaryButton}><Download size={15} className="mr-1.5 inline" />Gerar PDF com gráficos</button>
+            </div>
               <label className="text-xs text-slate-500">Bairro<select value={filtroBairro} onChange={evento => setFiltroBairro(evento.target.value)} className={inputClass}><option value="">Todos</option>{opcoesRelatorio.bairros.map(item => <option key={item}>{item}</option>)}</select></label>
               <label className="text-xs text-slate-500">Empresa prestadora<select value={filtroEmpresa} onChange={evento => setFiltroEmpresa(evento.target.value)} className={inputClass}><option value="">Todas</option>{opcoesRelatorio.empresas.map(item => <option key={item}>{item}</option>)}</select></label>
               <label className="text-xs text-slate-500">Entregador<select value={filtroEntregador} onChange={evento => setFiltroEntregador(evento.target.value)} className={inputClass}><option value="">Todos</option>{opcoesRelatorio.entregadores.map(item => <option key={item}>{item}</option>)}</select></label>
@@ -706,6 +753,32 @@ export default function EntregasMotos({
 
           <Card className="overflow-hidden">
             <div className="border-b border-slate-100 p-4 dark:border-slate-700">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card className="p-5">
+              <div className="mb-4"><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Comparação por empresa prestadora</h3><p className="text-xs text-slate-400">Gasto total das motos nos filtros selecionados</p></div>
+              <div className="flex flex-col gap-4">
+                {comparativoEmpresas.slice(0, 10).map(item => <div key={item.nome}>
+                  <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-medium text-slate-700 dark:text-slate-200">{item.nome}</span><span className="whitespace-nowrap font-semibold text-[#7A1420] dark:text-red-300">{dinheiro(item.total)}</span></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"><div className="h-full rounded-full bg-gradient-to-r from-[#7A1420] to-[#B42336]" style={{ width: `${Math.max(2, (item.total / maiorEmpresa) * 100)}%` }} /></div>
+                  <div className="mt-1 text-[11px] text-slate-400">{item.corridas} corrida(s) · média {dinheiro(item.corridas ? item.total / item.corridas : 0)}</div>
+                </div>)}
+                {!comparativoEmpresas.length && <div className="py-8 text-center text-sm text-slate-400">Nenhuma empresa encontrada.</div>}
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <div className="mb-4"><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Comparação por entregador</h3><p className="text-xs text-slate-400">Cadastrados e avulsos ordenados pelo maior gasto</p></div>
+              <div className="flex flex-col gap-4">
+                {comparativoEntregadores.slice(0, 10).map(item => <div key={item.nome}>
+                  <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-medium text-slate-700 dark:text-slate-200">{item.nome}</span><span className="whitespace-nowrap font-semibold text-[#7A1420] dark:text-red-300">{dinheiro(item.total)}</span></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"><div className="h-full rounded-full bg-gradient-to-r from-[#7A1420] to-[#B42336]" style={{ width: `${Math.max(2, (item.total / maiorEntregador) * 100)}%` }} /></div>
+                  <div className="mt-1 text-[11px] text-slate-400">{item.corridas} corrida(s) · média {dinheiro(item.corridas ? item.total / item.corridas : 0)}</div>
+                </div>)}
+                {!comparativoEntregadores.length && <div className="py-8 text-center text-sm text-slate-400">Nenhum entregador encontrado.</div>}
+              </div>
+            </Card>
+          </div>
+
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Relatório consolidado</h3>
               <p className="mt-0.5 text-xs text-slate-400">Bairro, empresa prestadora, entregador, quantidade de corridas e total</p>
             </div>
