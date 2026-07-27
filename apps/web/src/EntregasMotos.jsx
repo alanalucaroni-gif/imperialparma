@@ -516,7 +516,7 @@ export default function EntregasMotos({
 
       <Feedback feedback={feedback} />
 
-      {tab === "central" && <CentralLogistica entregadores={entregadores} onConcluirEntrega={onConcluirEntrega} />}
+      {tab === "central" && <CentralLogistica entregadores={entregadores} tarifas={tarifas} onConcluirEntrega={onConcluirEntrega} />}
 
       {tab === "corridas" && (
         <>

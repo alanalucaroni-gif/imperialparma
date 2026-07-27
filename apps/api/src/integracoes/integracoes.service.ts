@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { PrismaService } from "../prisma/prisma.service.js";
 import { SalvarCredencialDto, SalvarWhatsappMetaDto } from "./integracoes.dto.js";
 
-const PLATAFORMAS = new Set(["sichef", "cardapio-web", "ifood", "rappi"]);
+const PLATAFORMAS = new Set(["sichef", "cardapio-web", "ifood", "rappi", "google-maps"]);
 const WHATSAPP_META = "whatsapp-meta";
 
 type WhatsappMetadados = {
@@ -75,6 +75,21 @@ export class IntegracoesService {
     return { data: itens.map(item => this.metadados(item)) };
   }
 
+  async obterToken(plataforma: string): Promise<string | null> {
+    const chavePlataforma = this.plataformaValida(plataforma);
+    const variavelAmbiente = chavePlataforma === "google-maps"
+      ? process.env.GOOGLE_MAPS_API_KEY?.trim()
+      : undefined;
+    if (variavelAmbiente) return variavelAmbiente;
+    const item = await this.prisma.credencialIntegracao.findUnique({ where: { plataforma: chavePlataforma } });
+    if (!item) return null;
+    try {
+      return this.decifrar(item.segredoCifrado, item.iv, item.authTag);
+    } catch {
+      throw new UnprocessableEntityException("A credencial existe, mas não pode ser decifrada com a chave atual.");
+    }
+  }
+
   async salvar(plataforma: string, dto: SalvarCredencialDto) {
     const chavePlataforma = this.plataformaValida(plataforma);
     const segredo = this.cifrar(dto.token.trim());
@@ -93,10 +108,34 @@ export class IntegracoesService {
     try {
       const token = this.decifrar(item.segredoCifrado, item.iv, item.authTag);
       if (!token) throw new Error("Credencial vazia");
+      if (chavePlataforma === "google-maps") {
+        const resposta = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": token,
+            "X-Goog-FieldMask": "routes.distanceMeters",
+          },
+          body: JSON.stringify({
+            origin: { address: "Rua Assis Figueiredo, 555, Centro, Poços de Caldas - MG" },
+            destination: { address: "Centro, Poços de Caldas - MG" },
+            travelMode: "TWO_WHEELER",
+          }),
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (!resposta.ok) {
+          const corpo = await resposta.json().catch(() => ({})) as { error?: { message?: string } };
+          throw new Error(corpo.error?.message || `Google Maps respondeu HTTP ${resposta.status}.`);
+        }
+      }
       const verificadoEm = new Date();
       await this.prisma.credencialIntegracao.update({ where: { plataforma: chavePlataforma }, data: { verificadoEm } });
       return { plataforma: chavePlataforma, disponivel: true, verificadoEm };
-    } catch {
+    } catch (error) {
+      if (chavePlataforma === "google-maps") {
+        const mensagem = error instanceof Error ? error.message : "O Google Maps não aceitou essa chave.";
+        throw new UnprocessableEntityException(mensagem);
+      }
       throw new UnprocessableEntityException("A credencial existe, mas nao pode ser validada com a chave atual.");
     }
   }

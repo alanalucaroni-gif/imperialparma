@@ -179,6 +179,9 @@ class ImperialApi {
   compraManual(body: any) { return this.request<any>("/compras/manual", { method: "POST", body: JSON.stringify(body) }); }
   entradaBoleto(body: any) { return this.request<any>("/compras/boleto", { method: "POST", body: JSON.stringify(body) }); }
   entradaXml(body: any) { return this.request<any>("/compras/xml", { method: "POST", body: JSON.stringify(body) }); }
+  calcularDistanciaLogistica(body: { origem: string; destino: string; modo?: "TWO_WHEELER" | "DRIVE" }) {
+    return this.request<any>("/logistica/calcular-distancia", { method: "POST", body: JSON.stringify(body) });
+  }
   getCredenciaisIntegracao() { return this.request<any>("/integracoes/credenciais"); }
   salvarCredencialIntegracao(plataforma: string, body: { identificador?: string; token: string }) {
     return this.request<any>(`/integracoes/credenciais/${plataforma}`, { method: "PUT", body: JSON.stringify(body) });

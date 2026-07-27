@@ -14,6 +14,14 @@ function numero(valor) {
   return Number.isFinite(convertido) ? convertido : 0;
 }
 
+function normalizarFormaPagamento(valor) {
+  const texto = String(valor || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (texto.includes("pix")) return "PIX";
+  if (texto.includes("dinheiro") || texto.includes("cash")) return "DINHEIRO";
+  if (["cartao", "card", "credito", "debito"].some(item => texto.includes(item))) return "CARTAO";
+  return texto ? String(valor).toUpperCase() : "";
+}
+
 export const contratoPedidoSischef = [
   { imperial: "idExterno", descricao: "Identificador único do pedido no Sischef", obrigatorio: true },
   { imperial: "codigoPedido", descricao: "Número visível do pedido", obrigatorio: true },
@@ -26,6 +34,7 @@ export const contratoPedidoSischef = [
   { imperial: "formaPagamento", descricao: "Forma de pagamento informada no pedido", obrigatorio: false },
   { imperial: "canal", descricao: "Origem: iFood, Cardápio Web, balcão etc.", obrigatorio: false },
   { imperial: "observacoes", descricao: "Referência e observações da entrega", obrigatorio: false },
+  { imperial: "distanciaKm", descricao: "Calculada automaticamente pelo endereço completo no Google Maps", obrigatorio: false },
 ];
 
 export function normalizarPedidoSischef(payload) {
@@ -47,11 +56,31 @@ export function normalizarPedidoSischef(payload) {
     bairro: String(primeiroValor(payload, ["endereco.bairro", "cliente.endereco.bairro", "delivery.address.neighborhood", "bairro"], "")),
     valorPedido: numero(primeiroValor(payload, ["valorTotal", "total", "order.total"], 0)),
     taxaEntregaCliente: numero(primeiroValor(payload, ["taxaEntrega", "deliveryFee", "order.deliveryFee"], 0)),
-    formaPagamento: String(primeiroValor(payload, ["formaPagamento", "pagamento.descricao", "payments.0.method"], "")),
+    formaPagamento: normalizarFormaPagamento(primeiroValor(payload, ["formaPagamento", "pagamento.descricao", "payments.0.method"], "")),
     canal: String(primeiroValor(payload, ["canal", "origem", "order.channel"], "Sischef")),
     observacoes: String(primeiroValor(payload, ["observacoes", "referencia", "delivery.observations"], "")),
     origem: "SISCHEF",
     payloadOriginal: payload,
+  };
+}
+
+export async function normalizarPedidoSischefComRota(payload, calcularDistancia, enderecoOrigem) {
+  const pedido = normalizarPedidoSischef(payload);
+  if (!pedido.endereco || !pedido.bairro) return pedido;
+
+  const destino = `${pedido.endereco}, ${pedido.bairro}, Poços de Caldas - MG`;
+  const rota = await calcularDistancia({
+    origem: enderecoOrigem,
+    destino,
+    modo: "TWO_WHEELER",
+  });
+
+  return {
+    ...pedido,
+    enderecoOrigem,
+    distanciaKm: rota.distanciaKm,
+    origemDistancia: "GOOGLE_MAPS_ROUTES",
+    rotaCalculada: rota,
   };
 }
 

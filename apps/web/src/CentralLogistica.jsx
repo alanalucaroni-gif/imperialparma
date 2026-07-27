@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -22,6 +22,7 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react";
+import { api } from "./api.ts";
 import { contratoPedidoSischef } from "./logisticaSischef.js";
 
 const inputClass = "mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]";
@@ -116,14 +117,14 @@ const formularioInicial = {
   endereco: "",
   bairro: "",
   canal: "Direto",
-  formaPagamento: "",
+  formaPagamento: "PIX",
   valorPedido: "",
   taxaEntregaCliente: "",
   distanciaKm: "",
   observacoes: "",
 };
 
-export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
+export default function CentralLogistica({ entregadores, tarifas = [], onConcluirEntrega }) {
   const [aba, setAba] = useState("painel");
   const [pedidos, setPedidos] = useState(() => carregar("imperial.logisticsOrders.v1", []));
   const [configuracao, setConfiguracao] = useState(() => ({
@@ -134,8 +135,14 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
   const [atribuicoes, setAtribuicoes] = useState({});
   const [busca, setBusca] = useState("");
   const [feedback, setFeedback] = useState(null);
+  const [rotaFeedback, setRotaFeedback] = useState(null);
+  const [rotaCalculada, setRotaCalculada] = useState(null);
+  const [calculandoDistancia, setCalculandoDistancia] = useState(false);
+  const requisicaoRota = useRef(0);
 
   const ativos = entregadores.filter(item => item.ativo);
+  const bairros = useMemo(() => [...new Set(tarifas.map(item => item.bairro).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "pt-BR")), [tarifas]);
   const ocupados = new Set(pedidos.filter(item => ["COLETA", "EM_ROTA", "PROBLEMA"].includes(item.status)).map(item => item.entregador?.id).filter(Boolean));
   const disponiveis = ativos.filter(item => !ocupados.has(item.id));
 
@@ -169,6 +176,49 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
 
   function custoPara(distancia) {
     return Math.max(numero(configuracao.valorMinimo), distanciaCobrada(distancia) * numero(configuracao.valorKm));
+  }
+
+  function destinoDaRota(bairro, endereco) {
+    const partes = [];
+    if (endereco?.trim()) partes.push(endereco.trim());
+    if (bairro?.trim()) partes.push(bairro.trim());
+    partes.push("Poços de Caldas - MG");
+    return partes.join(", ");
+  }
+
+  async function calcularDistanciaAutomatica(bairro, endereco = "") {
+    if (!bairro?.trim()) return;
+    const idRequisicao = ++requisicaoRota.current;
+    setCalculandoDistancia(true);
+    setRotaFeedback({ tone: "amber", text: endereco.trim() ? "Calculando a rota até o endereço..." : "Calculando a rota até o centro do bairro..." });
+    try {
+      const rota = await api.calcularDistanciaLogistica({
+        origem: configuracao.enderecoOrigem,
+        destino: destinoDaRota(bairro, endereco),
+        modo: "TWO_WHEELER",
+      });
+      if (idRequisicao !== requisicaoRota.current) return;
+      setForm(atual => atual.bairro === bairro ? { ...atual, distanciaKm: String(rota.distanciaKm).replace(".", ",") } : atual);
+      setRotaCalculada(rota);
+      setRotaFeedback({
+        tone: "green",
+        text: `${rota.distanciaKm.toLocaleString("pt-BR")} km · cerca de ${rota.duracaoMinutos} min${endereco.trim() ? " · endereço exato" : " · centro do bairro"}`,
+      });
+    } catch (error) {
+      if (idRequisicao !== requisicaoRota.current) return;
+      setRotaCalculada(null);
+      setRotaFeedback({ tone: "red", text: error?.message || "Não foi possível calcular a rota automaticamente." });
+    } finally {
+      if (idRequisicao === requisicaoRota.current) setCalculandoDistancia(false);
+    }
+  }
+
+  function selecionarBairro(evento) {
+    const bairro = evento.target.value;
+    setForm(atual => ({ ...atual, bairro, distanciaKm: "" }));
+    setRotaCalculada(null);
+    setRotaFeedback(null);
+    if (bairro) calcularDistanciaAutomatica(bairro, form.endereco);
   }
 
   function salvarConfiguracao(evento) {
@@ -212,6 +262,8 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
       distanciaCobradaKm: distanciaCobrada(distancia),
       enderecoOrigem: configuracao.enderecoOrigem,
       tipoCalculoDistancia: configuracao.tipoCalculoDistancia,
+      origemDistancia: rotaCalculada ? "GOOGLE_MAPS_ROUTES" : "MANUAL",
+      rotaCalculada,
       custoEstimado: custoPara(distancia),
       custoReal: null,
       observacoes: form.observacoes.trim(),
@@ -224,6 +276,8 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
     };
     atualizarPedidos(atuais => [novo, ...atuais]);
     setForm(formularioInicial);
+    setRotaCalculada(null);
+    setRotaFeedback(null);
     setAba("painel");
     setFeedback({ tone: "green", text: `${novo.codigoPedido} entrou na fila de despacho.` });
   }
@@ -344,17 +398,17 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
         <label className="text-xs text-slate-500">Número do pedido<input value={form.codigoPedido} onChange={evento => setForm(atual => ({ ...atual, codigoPedido: evento.target.value }))} placeholder="Ex.: #2815" className={inputClass} /></label>
         <label className="text-xs text-slate-500">Cliente *<input value={form.clienteNome} onChange={evento => setForm(atual => ({ ...atual, clienteNome: evento.target.value }))} className={inputClass} /></label>
         <label className="text-xs text-slate-500">Telefone<input value={form.clienteTelefone} onChange={evento => setForm(atual => ({ ...atual, clienteTelefone: evento.target.value }))} className={inputClass} /></label>
-        <label className="text-xs text-slate-500">Bairro *<input value={form.bairro} onChange={evento => setForm(atual => ({ ...atual, bairro: evento.target.value }))} className={inputClass} /></label>
-        <label className="text-xs text-slate-500 sm:col-span-2">Endereço completo *<input value={form.endereco} onChange={evento => setForm(atual => ({ ...atual, endereco: evento.target.value }))} placeholder="Rua, número, complemento e referência" className={inputClass} /></label>
+        <label className="text-xs text-slate-500">Bairro *<select value={form.bairro} onChange={selecionarBairro} className={inputClass}><option value="">Selecione o bairro</option>{bairros.map(bairro => <option key={bairro} value={bairro}>{bairro}</option>)}</select></label>
+        <label className="text-xs text-slate-500 sm:col-span-2">Endereço completo *<input value={form.endereco} onChange={evento => setForm(atual => ({ ...atual, endereco: evento.target.value }))} onBlur={() => form.bairro && form.endereco.trim() && calcularDistanciaAutomatica(form.bairro, form.endereco)} placeholder="Rua, número, complemento e referência" className={inputClass} /><span className="mt-1 block text-[11px] text-slate-400">Ao sair deste campo, a distância é refinada pelo endereço exato.</span></label>
         <label className="text-xs text-slate-500">Canal<select value={form.canal} onChange={evento => setForm(atual => ({ ...atual, canal: evento.target.value }))} className={inputClass}><option>Direto</option><option>iFood</option><option>Cardápio Web</option><option>WhatsApp</option><option>Sischef</option></select></label>
-        <label className="text-xs text-slate-500">Forma de pagamento<input value={form.formaPagamento} onChange={evento => setForm(atual => ({ ...atual, formaPagamento: evento.target.value }))} className={inputClass} /></label>
+        <label className="text-xs text-slate-500">Forma de pagamento<select value={form.formaPagamento} onChange={evento => setForm(atual => ({ ...atual, formaPagamento: evento.target.value }))} className={inputClass}><option value="PIX">Pix</option><option value="DINHEIRO">Dinheiro</option><option value="CARTAO">Cartão</option></select></label>
         <label className="text-xs text-slate-500">Valor do pedido<input inputMode="decimal" value={form.valorPedido} onChange={evento => setForm(atual => ({ ...atual, valorPedido: evento.target.value }))} placeholder="0,00" className={inputClass} /></label>
         <label className="text-xs text-slate-500">Taxa cobrada do cliente<input inputMode="decimal" value={form.taxaEntregaCliente} onChange={evento => setForm(atual => ({ ...atual, taxaEntregaCliente: evento.target.value }))} placeholder="0,00" className={inputClass} /></label>
-        <label className="text-xs text-slate-500">Distância da loja ao cliente (km) *<input inputMode="decimal" value={form.distanciaKm} onChange={evento => setForm(atual => ({ ...atual, distanciaKm: evento.target.value }))} placeholder="0,0" className={inputClass} /></label>
+        <label className="text-xs text-slate-500">Distância da loja ao cliente (km) *<div className="mt-1 flex gap-2"><input inputMode="decimal" value={form.distanciaKm} onChange={evento => { setForm(atual => ({ ...atual, distanciaKm: evento.target.value })); setRotaCalculada(null); }} placeholder="Automática" className={inputClass.replace("mt-1 ", "")} /><button type="button" onClick={() => calcularDistanciaAutomatica(form.bairro, form.endereco)} disabled={!form.bairro || calculandoDistancia} className="rounded-xl border border-slate-300 px-3 text-xs font-medium disabled:opacity-40">{calculandoDistancia ? "Calculando..." : "Recalcular"}</button></div>{rotaFeedback && <span className={cx("mt-1.5 block text-[11px]", rotaFeedback.tone === "green" ? "text-emerald-600" : rotaFeedback.tone === "red" ? "text-rose-600" : "text-amber-600")}>{rotaFeedback.text}</span>}</label>
         <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-700/30"><div className="text-[10px] uppercase text-slate-400">Custo próprio estimado</div><div className="mt-1 text-lg font-semibold text-[#7A1420] dark:text-red-300">{form.distanciaKm ? dinheiro(custoPara(form.distanciaKm)) : "—"}</div><div className="text-[11px] text-slate-400">{dinheiro(configuracao.valorKm)}/km · mínimo {dinheiro(configuracao.valorMinimo)} · {configuracao.tipoCalculoDistancia === "ida_volta" ? "ida e volta" : "somente ida"}</div></div>
         <div className="rounded-xl border border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 sm:col-span-2"><MapPin size={13} className="mr-1 inline text-[#7A1420] dark:text-red-300" /><strong>Saída:</strong> {configuracao.enderecoOrigem}</div>
         <label className="text-xs text-slate-500 sm:col-span-2">Observações<input value={form.observacoes} onChange={evento => setForm(atual => ({ ...atual, observacoes: evento.target.value }))} className={inputClass} /></label>
-        <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={() => setForm(formularioInicial)} className={secondaryButton}>Limpar</button><button className={primaryButton}><Plus size={15} className="mr-1 inline" />Colocar na fila</button></div>
+        <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={() => { setForm(formularioInicial); setRotaCalculada(null); setRotaFeedback(null); }} className={secondaryButton}>Limpar</button><button disabled={calculandoDistancia} className={primaryButton}><Plus size={15} className="mr-1 inline" />Colocar na fila</button></div>
       </form></Card>
       <Card className="p-5"><Route size={22} className="text-[#7A1420] dark:text-red-300" /><h3 className="mt-3 font-semibold text-slate-900 dark:text-white">Como funciona agora</h3><ol className="mt-4 space-y-3 text-sm text-slate-500"><li className="flex gap-2"><span className="font-semibold text-[#7A1420]">1.</span>Cadastre o pedido recebido.</li><li className="flex gap-2"><span className="font-semibold text-[#7A1420]">2.</span>Selecione o entregador no painel.</li><li className="flex gap-2"><span className="font-semibold text-[#7A1420]">3.</span>Confirme coleta e saída.</li><li className="flex gap-2"><span className="font-semibold text-[#7A1420]">4.</span>Conclua para registrar o custo.</li></ol></Card>
     </div>}

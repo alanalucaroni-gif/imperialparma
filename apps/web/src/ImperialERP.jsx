@@ -10297,6 +10297,7 @@ function CentralImportacoes({ estoqueItens, fichas, mapeamentos, importacoes, on
 
 const PLATAFORMAS_INTEGRACAO = [
   { key: "sichef", nome: "SiChef", selo: "Prioridade 1", icon: ScanLine, descricao: "Fonte principal recomendada para centralizar os pedidos e evitar duplicidade entre os canais." },
+  { key: "google-maps", nome: "Google Maps", selo: "Rotas automáticas", icon: MapPin, descricao: "Calcula quilômetros e tempo de moto entre a loja e o bairro ou endereço exato recebido no pedido." },
   { key: "cardapio-web", nome: "Cardápio Web", selo: "Canal próprio", icon: ShoppingCart, descricao: "Recebe pedidos do cardápio online e alimenta estoque, produtos vendidos e indicadores do canal próprio." },
   { key: "ifood", nome: "iFood", selo: "Marketplace", icon: Bike, descricao: "Prepara a conexão de pedidos, cancelamentos, taxas e repasses do iFood." },
   { key: "rappi", nome: "Rappi", selo: "Marketplace", icon: Truck, descricao: "Prepara a conexão de pedidos, entregas, cancelamentos e repasses do Rappi." },
@@ -10531,7 +10532,7 @@ function ConfiguracoesIntegracoes({ apiStatus }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Configurações</h2><p className="text-sm text-slate-500 dark:text-slate-400">Integrações de vendas e credenciais das plataformas</p></div>
+        <div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Configurações</h2><p className="text-sm text-slate-500 dark:text-slate-400">Integrações de vendas, mapas e credenciais das plataformas</p></div>
         <Badge tone={cadastradas ? "green" : "slate"}>{carregando ? "Carregando…" : `${cadastradas} de ${PLATAFORMAS_INTEGRACAO.length} credenciais cadastradas`}</Badge>
       </div>
 
@@ -10553,6 +10554,7 @@ function ConfiguracoesIntegracoes({ apiStatus }) {
           const salvo = Boolean(item?.possuiCredencial);
           const feedback = feedbacks[plataforma.key];
           const formulario = formularios[plataforma.key];
+          const ehGoogleMaps = plataforma.key === "google-maps";
           return (
             <Card key={plataforma.key} className="p-4 sm:p-5">
               <div className="flex items-start justify-between gap-3">
@@ -10561,8 +10563,8 @@ function ConfiguracoesIntegracoes({ apiStatus }) {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-                <label className="text-xs text-slate-500 dark:text-slate-400">Código da empresa / loja (opcional)<input value={formulario.identificador} onChange={e => alterarFormulario(plataforma.key, "identificador", e.target.value)} placeholder="Opcional" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]" /></label>
-                <label className="text-xs text-slate-500 dark:text-slate-400">Token / chave de API<input type="password" value={formulario.token} onChange={e => alterarFormulario(plataforma.key, "token", e.target.value)} placeholder={salvo ? "Cole um novo token para substituir" : "Cole o token aqui"} autoComplete="new-password" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]" /></label>
+                <label className="text-xs text-slate-500 dark:text-slate-400">{ehGoogleMaps ? "Nome do projeto Google Cloud (opcional)" : "Código da empresa / loja (opcional)"}<input value={formulario.identificador} onChange={e => alterarFormulario(plataforma.key, "identificador", e.target.value)} placeholder="Opcional" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]" /></label>
+                <label className="text-xs text-slate-500 dark:text-slate-400">{ehGoogleMaps ? "Chave da Routes API" : "Token / chave de API"}<input type="password" value={formulario.token} onChange={e => alterarFormulario(plataforma.key, "token", e.target.value)} placeholder={salvo ? "Cole uma nova chave para substituir" : ehGoogleMaps ? "Cole a chave do Google Maps" : "Cole o token aqui"} autoComplete="new-password" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]" /></label>
               </div>
 
               {salvo && <div className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-3"><CheckCircle2 size={11} className="inline mr-1" />Protegida · atualizada em {formatarData(item.atualizadoEm)}{item.verificadoEm ? ` · verificada em ${formatarData(item.verificadoEm)}` : ""}</div>}
@@ -10573,7 +10575,7 @@ function ConfiguracoesIntegracoes({ apiStatus }) {
                 <button onClick={() => verificar(plataforma.key)} disabled={!salvo} className="rounded-xl border border-slate-300 dark:border-slate-600 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-sm font-medium px-4 py-2.5">Verificar</button>
                 <button onClick={() => setGuiasAbertos(prev => ({ ...prev, [plataforma.key]: !prev[plataforma.key] }))} className="rounded-xl border border-amber-400/60 text-amber-700 dark:text-amber-300 text-sm font-medium px-4 py-2.5">Como ativar a API</button>
               </div>
-              {guiasAbertos[plataforma.key] && <div className="mt-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 p-3 text-xs text-slate-500 dark:text-slate-300">Solicite a chave no painel administrativo da {plataforma.nome}, cadastre a URL de webhook fornecida pelo ERP e valide primeiro em ambiente de homologação. O recebimento automático permanece desligado até essa etapa.</div>}
+              {guiasAbertos[plataforma.key] && <div className="mt-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 p-3 text-xs text-slate-500 dark:text-slate-300">{ehGoogleMaps ? "No Google Cloud, ative a Routes API, crie uma chave restrita somente a essa API, cole a chave acima e clique em Verificar. A chave ficará criptografada no ERP." : <>Solicite a chave no painel administrativo da {plataforma.nome}, cadastre a URL de webhook fornecida pelo ERP e valide primeiro em ambiente de homologação. O recebimento automático permanece desligado até essa etapa.</>}</div>}
               {salvo && <button onClick={() => remover(plataforma.key)} className="mt-4 text-xs text-rose-600 dark:text-rose-400 hover:underline"><XCircle size={12} className="inline mr-1" />Remover</button>}
             </Card>
           );
