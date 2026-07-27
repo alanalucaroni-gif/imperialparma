@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import CentralLogistica from "./CentralLogistica.jsx";
 import { abrirRelatorioMotosPdf } from "./relatorioMotosPdf.js";
+import { empresaUsaPrecoTabela, valorTabelaEntrega } from "./regraCustoEntrega.js";
 import {
   BarChart3,
   Bike,
@@ -49,8 +50,7 @@ function dinheiro(valor) {
 }
 
 function tarifaDaCorrida(tarifas, empresa, bairro) {
-  const destino = tarifas.find(item => normalizar(item.bairro) === normalizar(bairro));
-  return destino?.valores?.[empresa] ?? null;
+  return valorTabelaEntrega(tarifas, empresa, bairro);
 }
 
 function dataDaCorrida(corrida) {
@@ -196,8 +196,10 @@ export default function EntregasMotos({
 
   const entregadorCadastrado = entregadores.find(item => item.id === entregadorId);
   const empresaCorrida = modoEntregador === "avulso" ? empresaAvulsa : entregadorCadastrado?.tipo;
+  const empresaTabelaObrigatoria = empresaUsaPrecoTabela(empresaCorrida);
   const valorTabela = tarifaDaCorrida(tarifas, empresaCorrida, bairro);
-  const valorAplicado = modoEntregador === "avulso" || usarValorLivre ? numero(valorLivre) : Number(valorTabela || 0);
+  const usaValorLivreEfetivo = !empresaTabelaObrigatoria && (modoEntregador === "avulso" || usarValorLivre);
+  const valorAplicado = usaValorLivreEfetivo ? numero(valorLivre) : Number(valorTabela || 0);
   const totalLista = lista.reduce((total, item) => total + Number(item.valor || 0), 0);
   const totalGeral = corridas.reduce((total, item) => total + Number(item.valor || 0), 0);
 
@@ -333,6 +335,10 @@ export default function EntregasMotos({
       setFeedback({ tone: "red", text: "Informe o bairro ou destino da entrega." });
       return;
     }
+    if (empresaTabelaObrigatoria && valorTabela == null) {
+      setFeedback({ tone: "red", text: `Cadastre o preço de ${empresaCorrida} para ${bairro.trim()} na Tabela de Bairros.` });
+      return;
+    }
     if (valorAplicado <= 0) {
       setFeedback({ tone: "red", text: "Informe um valor livre maior que zero ou selecione um destino com preço cadastrado." });
       return;
@@ -343,7 +349,7 @@ export default function EntregasMotos({
       pedido: pedido.trim() || "Sem número",
       bairro: bairro.trim(),
       valor: valorAplicado,
-      origemValor: modoEntregador === "avulso" || usarValorLivre ? "livre" : "tabela",
+      origemValor: usaValorLivreEfetivo ? "livre" : "tabela",
     }]);
     setPedido("");
     setFeedback({ tone: "green", text: `${bairro.trim()} adicionado à lista de ${responsavel.nome}.` });
@@ -573,10 +579,10 @@ export default function EntregasMotos({
               </label>
               <div>
                 <label className="mb-1 flex items-center gap-2 text-xs text-slate-500">
-                  <input type="checkbox" checked={modoEntregador === "avulso" || usarValorLivre} disabled={modoEntregador === "avulso"} onChange={evento => setUsarValorLivre(evento.target.checked)} />
-                  Valor livre (sem tabela)
+                  <input type="checkbox" checked={usaValorLivreEfetivo} disabled={modoEntregador === "avulso" || empresaTabelaObrigatoria} onChange={evento => setUsarValorLivre(evento.target.checked)} />
+                  {empresaTabelaObrigatoria ? "Preço obrigatório da tabela" : "Valor livre (sem tabela)"}
                 </label>
-                {modoEntregador === "avulso" || usarValorLivre ? (
+                {usaValorLivreEfetivo ? (
                   <input inputMode="decimal" value={valorLivre} onChange={evento => setValorLivre(evento.target.value)} placeholder="R$ 0,00" className={cx(inputClass, "mt-0")} />
                 ) : (
                   <div className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-700/30">

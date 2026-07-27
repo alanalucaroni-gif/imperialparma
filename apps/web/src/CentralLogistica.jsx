@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { api } from "./api.ts";
 import { contratoPedidoSischef } from "./logisticaSischef.js";
+import { calcularCustoDespacho, empresaUsaPrecoTabela } from "./regraCustoEntrega.js";
 
 const inputClass = "mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]";
 const primaryButton = "rounded-xl bg-[#7A1420] hover:bg-[#611018] disabled:cursor-not-allowed disabled:opacity-40 px-4 py-2.5 text-sm font-medium text-white";
@@ -221,6 +222,15 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     if (bairro) calcularDistanciaAutomatica(bairro, form.endereco);
   }
 
+  function rotuloEntregador(entregador, pedido) {
+    const custo = calcularCustoDespacho({ pedido, entregador, tarifas });
+    if (empresaUsaPrecoTabela(entregador.tipo)) {
+      const detalhe = custo.erro ? "sem preço para o bairro" : `tabela ${dinheiro(custo.valor)}`;
+      return `${entregador.nome} · ${entregador.tipo} · ${detalhe}`;
+    }
+    return `${entregador.nome} · ${entregador.tipo} · por km`;
+  }
+
   function salvarConfiguracao(evento) {
     evento.preventDefault();
     const proxima = {
@@ -299,8 +309,23 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
       setFeedback({ tone: "red", text: "Selecione um entregador ativo para despachar." });
       return;
     }
-    alterarStatus(pedido.id, "COLETA", `Pedido atribuído a ${entregador.nome}.`, { entregador: { id: entregador.id, nome: entregador.nome, empresa: entregador.tipo }, atribuidoEm: dataHora() });
-    setFeedback({ tone: "green", text: `${pedido.codigoPedido} atribuído a ${entregador.nome}.` });
+    const custo = calcularCustoDespacho({ pedido, entregador, tarifas });
+    if (custo.erro) {
+      setFeedback({ tone: "red", text: custo.erro });
+      return;
+    }
+    const descricaoCusto = custo.origemValor === "tabela"
+      ? `preço de tabela ${entregador.tipo}`
+      : "cálculo por quilômetro";
+    alterarStatus(pedido.id, "COLETA", `Pedido atribuído a ${entregador.nome} com ${descricaoCusto}.`, {
+      entregador: { id: entregador.id, nome: entregador.nome, empresa: entregador.tipo },
+      atribuidoEm: dataHora(),
+      custoEstimado: custo.valor,
+      origemValor: custo.origemValor,
+      tabelaEmpresa: custo.empresaTabela,
+      distanciaCobradaKm: custo.origemValor === "tabela" ? null : pedido.distanciaCobradaKm,
+    });
+    setFeedback({ tone: "green", text: `${pedido.codigoPedido} atribuído a ${entregador.nome} por ${dinheiro(custo.valor)} (${descricaoCusto}).` });
   }
 
   function confirmarColeta(pedido) {
@@ -342,18 +367,19 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
   function PedidoCard({ pedido }) {
     const status = statusConfig[pedido.status] || statusConfig.AGUARDANDO;
     const saldoEntrega = Number(pedido.taxaEntregaCliente || 0) - Number(pedido.custoEstimado || 0);
+    const origemCusto = pedido.origemValor === "tabela" ? `tabela ${pedido.tabelaEmpresa || ""}`.trim() : "por km";
     return <div className={cx("rounded-xl border bg-white p-3 dark:bg-slate-800", pedido.status === "PROBLEMA" ? "border-rose-300 dark:border-rose-500/40" : "border-slate-200 dark:border-slate-700")}>
       <div className="flex items-start justify-between gap-2"><div><div className="font-mono text-[10px] text-slate-400">{pedido.codigoPedido}</div><div className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-white">{pedido.clienteNome}</div></div><Badge tone={status.tone}>{status.label}</Badge></div>
       <div className="mt-3 space-y-1.5 text-xs text-slate-500">
         <div className="flex items-start gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0" /><span>{pedido.endereco} · {pedido.bairro}</span></div>
-        <div className="flex items-center gap-1.5"><Route size={13} /><span>{Number(pedido.distanciaKm).toLocaleString("pt-BR")} km de ida{Number(pedido.distanciaCobradaKm || pedido.distanciaKm) !== Number(pedido.distanciaKm) ? ` · ${Number(pedido.distanciaCobradaKm).toLocaleString("pt-BR")} km pagos` : ""} · custo {dinheiro(pedido.custoEstimado)}</span></div>
+        <div className="flex items-center gap-1.5"><Route size={13} /><span>{Number(pedido.distanciaKm).toLocaleString("pt-BR")} km de ida{pedido.origemValor !== "tabela" && Number(pedido.distanciaCobradaKm || pedido.distanciaKm) !== Number(pedido.distanciaKm) ? ` · ${Number(pedido.distanciaCobradaKm).toLocaleString("pt-BR")} km pagos` : ""} · custo {dinheiro(pedido.custoEstimado)} ({origemCusto})</span></div>
         <div className="flex items-center gap-1.5"><Wallet size={13} /><span>Pedido {dinheiro(pedido.valorPedido)} · taxa cliente {dinheiro(pedido.taxaEntregaCliente)} · saldo <strong className={saldoEntrega >= 0 ? "text-emerald-600" : "text-rose-600"}>{dinheiro(saldoEntrega)}</strong></span></div>
         {pedido.entregador && <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300"><Bike size={13} />{pedido.entregador.nome} · {pedido.entregador.empresa}</div>}
         <div className="flex items-center gap-1.5 text-slate-400"><Clock3 size={13} />Atualizado às {hora(pedido.atualizadoEm)}</div>
         {pedido.ocorrencia && <div className="rounded-lg bg-rose-50 p-2 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"><AlertTriangle size={12} className="mr-1 inline" />{pedido.ocorrencia}</div>}
       </div>
 
-      {pedido.status === "AGUARDANDO" && <div className="mt-3 flex gap-2"><select value={atribuicoes[pedido.id] || ""} onChange={evento => setAtribuicoes(atual => ({ ...atual, [pedido.id]: evento.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"><option value="">Selecionar entregador</option>{ativos.map(item => <option key={item.id} value={item.id} disabled={ocupados.has(item.id)}>{item.nome}{ocupados.has(item.id) ? " · ocupado" : ""}</option>)}</select><button type="button" onClick={() => despachar(pedido)} className="rounded-lg bg-[#7A1420] px-3 py-2 text-xs font-medium text-white">Despachar</button></div>}
+      {pedido.status === "AGUARDANDO" && <div className="mt-3 flex gap-2"><select value={atribuicoes[pedido.id] || ""} onChange={evento => setAtribuicoes(atual => ({ ...atual, [pedido.id]: evento.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"><option value="">Selecionar entregador</option>{ativos.map(item => <option key={item.id} value={item.id} disabled={ocupados.has(item.id)}>{rotuloEntregador(item, pedido)}{ocupados.has(item.id) ? " · ocupado" : ""}</option>)}</select><button type="button" onClick={() => despachar(pedido)} className="rounded-lg bg-[#7A1420] px-3 py-2 text-xs font-medium text-white">Despachar</button></div>}
       {pedido.status === "COLETA" && <div className="mt-3 flex gap-2"><button type="button" onClick={() => confirmarColeta(pedido)} className={cx(primaryButton, "flex-1 py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Confirmar coleta</button><button type="button" onClick={() => cancelarPedido(pedido)} className="rounded-lg border border-rose-200 px-3 text-xs text-rose-600"><XCircle size={14} /></button></div>}
       {pedido.status === "EM_ROTA" && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => concluirEntrega(pedido)} className={cx(primaryButton, "py-2 text-xs")}><CheckCircle2 size={13} className="mr-1 inline" />Concluir</button><button type="button" onClick={() => registrarProblema(pedido)} className="rounded-lg border border-amber-200 px-3 py-2 text-xs text-amber-700"><AlertTriangle size={13} className="mr-1 inline" />Problema</button></div>}
       {pedido.status === "PROBLEMA" && <button type="button" onClick={() => alterarStatus(pedido.id, "EM_ROTA", "Entrega retomada após ocorrência.", { ocorrencia: null })} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><RefreshCw size={13} className="mr-1 inline" />Retomar entrega</button>}

@@ -11636,7 +11636,7 @@ export default function ImperialERP() {
     if (caixa) {
       const resultadoCaixa = handleMovimentarCaixa({
         tipo: "saida",
-        descricao: `Logística própria — ${pedido.codigoPedido} — ${entregador.nome}`,
+        descricao: `Entrega ${entregador.tipo || "Frota Imperial"} — ${pedido.codigoPedido} — ${entregador.nome}`,
         valor,
       });
       if (resultadoCaixa.tone === "red") return resultadoCaixa;
@@ -11658,8 +11658,8 @@ export default function ImperialERP() {
       distanciaKm: Number(pedido.distanciaKm || 0),
       valorPedido: Number(pedido.valorPedido || 0),
       taxaCliente: Number(pedido.taxaEntregaCliente || 0),
-      origem: "LOGISTICA_PROPRIA",
-      origemValor: "quilometro",
+      origem: "CENTRAL_LOGISTICA",
+      origemValor: pedido.origemValor || "quilometro",
       lancadaEm: `hoje ${horario}`,
       dataLancamento: agora.toISOString(),
       status: caixaId ? "paga" : "pendente_pagamento",
