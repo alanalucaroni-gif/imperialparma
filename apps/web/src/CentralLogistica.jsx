@@ -27,6 +27,13 @@ import { contratoPedidoSischef } from "./logisticaSischef.js";
 const inputClass = "mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]";
 const primaryButton = "rounded-xl bg-[#7A1420] hover:bg-[#611018] disabled:cursor-not-allowed disabled:opacity-40 px-4 py-2.5 text-sm font-medium text-white";
 const secondaryButton = "rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/40";
+const configuracaoInicial = {
+  enderecoOrigem: "Rua Assis Figueiredo, 555, Loja 2, Centro, Poços de Caldas - MG",
+  tipoCalculoDistancia: "ida",
+  valorKm: 2.5,
+  valorMinimo: 8,
+  raioMaximoKm: 12,
+};
 
 const statusConfig = {
   AGUARDANDO: { label: "Aguardando despacho", tone: "amber" },
@@ -119,10 +126,9 @@ const formularioInicial = {
 export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
   const [aba, setAba] = useState("painel");
   const [pedidos, setPedidos] = useState(() => carregar("imperial.logisticsOrders.v1", []));
-  const [configuracao, setConfiguracao] = useState(() => carregar("imperial.logisticsSettings.v1", {
-    valorKm: 2.5,
-    valorMinimo: 8,
-    raioMaximoKm: 12,
+  const [configuracao, setConfiguracao] = useState(() => ({
+    ...configuracaoInicial,
+    ...carregar("imperial.logisticsSettings.v1", {}),
   }));
   const [form, setForm] = useState(formularioInicial);
   const [atribuicoes, setAtribuicoes] = useState({});
@@ -156,13 +162,20 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
     setPedidos(atuais => salvar("imperial.logisticsOrders.v1", transformar(atuais)));
   }
 
+  function distanciaCobrada(distancia) {
+    const multiplicador = configuracao.tipoCalculoDistancia === "ida_volta" ? 2 : 1;
+    return numero(distancia) * multiplicador;
+  }
+
   function custoPara(distancia) {
-    return Math.max(numero(configuracao.valorMinimo), numero(distancia) * numero(configuracao.valorKm));
+    return Math.max(numero(configuracao.valorMinimo), distanciaCobrada(distancia) * numero(configuracao.valorKm));
   }
 
   function salvarConfiguracao(evento) {
     evento.preventDefault();
     const proxima = {
+      enderecoOrigem: configuracao.enderecoOrigem.trim(),
+      tipoCalculoDistancia: configuracao.tipoCalculoDistancia === "ida_volta" ? "ida_volta" : "ida",
       valorKm: numero(configuracao.valorKm),
       valorMinimo: numero(configuracao.valorMinimo),
       raioMaximoKm: numero(configuracao.raioMaximoKm),
@@ -196,6 +209,9 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
       valorPedido: numero(form.valorPedido),
       taxaEntregaCliente: numero(form.taxaEntregaCliente),
       distanciaKm: distancia,
+      distanciaCobradaKm: distanciaCobrada(distancia),
+      enderecoOrigem: configuracao.enderecoOrigem,
+      tipoCalculoDistancia: configuracao.tipoCalculoDistancia,
       custoEstimado: custoPara(distancia),
       custoReal: null,
       observacoes: form.observacoes.trim(),
@@ -276,7 +292,7 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
       <div className="flex items-start justify-between gap-2"><div><div className="font-mono text-[10px] text-slate-400">{pedido.codigoPedido}</div><div className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-white">{pedido.clienteNome}</div></div><Badge tone={status.tone}>{status.label}</Badge></div>
       <div className="mt-3 space-y-1.5 text-xs text-slate-500">
         <div className="flex items-start gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0" /><span>{pedido.endereco} · {pedido.bairro}</span></div>
-        <div className="flex items-center gap-1.5"><Route size={13} /><span>{Number(pedido.distanciaKm).toLocaleString("pt-BR")} km · custo {dinheiro(pedido.custoEstimado)}</span></div>
+        <div className="flex items-center gap-1.5"><Route size={13} /><span>{Number(pedido.distanciaKm).toLocaleString("pt-BR")} km de ida{Number(pedido.distanciaCobradaKm || pedido.distanciaKm) !== Number(pedido.distanciaKm) ? ` · ${Number(pedido.distanciaCobradaKm).toLocaleString("pt-BR")} km pagos` : ""} · custo {dinheiro(pedido.custoEstimado)}</span></div>
         <div className="flex items-center gap-1.5"><Wallet size={13} /><span>Pedido {dinheiro(pedido.valorPedido)} · taxa cliente {dinheiro(pedido.taxaEntregaCliente)} · saldo <strong className={saldoEntrega >= 0 ? "text-emerald-600" : "text-rose-600"}>{dinheiro(saldoEntrega)}</strong></span></div>
         {pedido.entregador && <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300"><Bike size={13} />{pedido.entregador.nome} · {pedido.entregador.empresa}</div>}
         <div className="flex items-center gap-1.5 text-slate-400"><Clock3 size={13} />Atualizado às {hora(pedido.atualizadoEm)}</div>
@@ -334,8 +350,9 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
         <label className="text-xs text-slate-500">Forma de pagamento<input value={form.formaPagamento} onChange={evento => setForm(atual => ({ ...atual, formaPagamento: evento.target.value }))} className={inputClass} /></label>
         <label className="text-xs text-slate-500">Valor do pedido<input inputMode="decimal" value={form.valorPedido} onChange={evento => setForm(atual => ({ ...atual, valorPedido: evento.target.value }))} placeholder="0,00" className={inputClass} /></label>
         <label className="text-xs text-slate-500">Taxa cobrada do cliente<input inputMode="decimal" value={form.taxaEntregaCliente} onChange={evento => setForm(atual => ({ ...atual, taxaEntregaCliente: evento.target.value }))} placeholder="0,00" className={inputClass} /></label>
-        <label className="text-xs text-slate-500">Distância estimada (km) *<input inputMode="decimal" value={form.distanciaKm} onChange={evento => setForm(atual => ({ ...atual, distanciaKm: evento.target.value }))} placeholder="0,0" className={inputClass} /></label>
-        <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-700/30"><div className="text-[10px] uppercase text-slate-400">Custo próprio estimado</div><div className="mt-1 text-lg font-semibold text-[#7A1420] dark:text-red-300">{form.distanciaKm ? dinheiro(custoPara(form.distanciaKm)) : "—"}</div><div className="text-[11px] text-slate-400">{dinheiro(configuracao.valorKm)}/km · mínimo {dinheiro(configuracao.valorMinimo)}</div></div>
+        <label className="text-xs text-slate-500">Distância da loja ao cliente (km) *<input inputMode="decimal" value={form.distanciaKm} onChange={evento => setForm(atual => ({ ...atual, distanciaKm: evento.target.value }))} placeholder="0,0" className={inputClass} /></label>
+        <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-700/30"><div className="text-[10px] uppercase text-slate-400">Custo próprio estimado</div><div className="mt-1 text-lg font-semibold text-[#7A1420] dark:text-red-300">{form.distanciaKm ? dinheiro(custoPara(form.distanciaKm)) : "—"}</div><div className="text-[11px] text-slate-400">{dinheiro(configuracao.valorKm)}/km · mínimo {dinheiro(configuracao.valorMinimo)} · {configuracao.tipoCalculoDistancia === "ida_volta" ? "ida e volta" : "somente ida"}</div></div>
+        <div className="rounded-xl border border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 sm:col-span-2"><MapPin size={13} className="mr-1 inline text-[#7A1420] dark:text-red-300" /><strong>Saída:</strong> {configuracao.enderecoOrigem}</div>
         <label className="text-xs text-slate-500 sm:col-span-2">Observações<input value={form.observacoes} onChange={evento => setForm(atual => ({ ...atual, observacoes: evento.target.value }))} className={inputClass} /></label>
         <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={() => setForm(formularioInicial)} className={secondaryButton}>Limpar</button><button className={primaryButton}><Plus size={15} className="mr-1 inline" />Colocar na fila</button></div>
       </form></Card>
@@ -344,7 +361,7 @@ export default function CentralLogistica({ entregadores, onConcluirEntrega }) {
 
     {aba === "integracao" && <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
       <div className="flex flex-col gap-4">
-        <Card className="p-5"><div className="flex items-center gap-2"><Settings2 size={18} className="text-[#7A1420] dark:text-red-300" /><h3 className="font-semibold text-slate-900 dark:text-white">Parâmetros da frota própria</h3></div><p className="mb-4 mt-1 text-xs text-slate-400">Valores iniciais de teste; ajuste antes de operar</p><form onSubmit={salvarConfiguracao} className="space-y-3"><label className="text-xs text-slate-500">Valor por quilômetro<input inputMode="decimal" value={configuracao.valorKm} onChange={evento => setConfiguracao(atual => ({ ...atual, valorKm: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Valor mínimo por entrega<input inputMode="decimal" value={configuracao.valorMinimo} onChange={evento => setConfiguracao(atual => ({ ...atual, valorMinimo: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Raio máximo (km)<input inputMode="decimal" value={configuracao.raioMaximoKm} onChange={evento => setConfiguracao(atual => ({ ...atual, raioMaximoKm: evento.target.value }))} className={inputClass} /></label><button className={cx(primaryButton, "w-full")}>Salvar parâmetros</button></form></Card>
+        <Card className="p-5"><div className="flex items-center gap-2"><Settings2 size={18} className="text-[#7A1420] dark:text-red-300" /><h3 className="font-semibold text-slate-900 dark:text-white">Parâmetros da frota própria</h3></div><p className="mb-4 mt-1 text-xs text-slate-400">A distância parte sempre do endereço da loja</p><form onSubmit={salvarConfiguracao} className="space-y-3"><label className="text-xs text-slate-500">Endereço de saída<input value={configuracao.enderecoOrigem} onChange={evento => setConfiguracao(atual => ({ ...atual, enderecoOrigem: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Quilometragem paga<select value={configuracao.tipoCalculoDistancia} onChange={evento => setConfiguracao(atual => ({ ...atual, tipoCalculoDistancia: evento.target.value }))} className={inputClass}><option value="ida">Somente ida (loja → cliente)</option><option value="ida_volta">Ida e volta (loja → cliente → loja)</option></select></label><label className="text-xs text-slate-500">Valor por quilômetro<input inputMode="decimal" value={configuracao.valorKm} onChange={evento => setConfiguracao(atual => ({ ...atual, valorKm: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Valor mínimo por entrega<input inputMode="decimal" value={configuracao.valorMinimo} onChange={evento => setConfiguracao(atual => ({ ...atual, valorMinimo: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Raio máximo (km)<input inputMode="decimal" value={configuracao.raioMaximoKm} onChange={evento => setConfiguracao(atual => ({ ...atual, raioMaximoKm: evento.target.value }))} className={inputClass} /></label><button className={cx(primaryButton, "w-full")}>Salvar parâmetros</button></form></Card>
         <Card className="p-5"><Navigation size={20} className="text-sky-600" /><h3 className="mt-2 font-semibold text-slate-900 dark:text-white">Rastreamento GPS</h3><p className="mt-2 text-sm text-slate-500">Estrutura reservada para o aplicativo do entregador enviar localização, disponibilidade e status em tempo real.</p><Badge tone="blue">Próxima etapa</Badge></Card>
       </div>
       <Card className="overflow-hidden"><div className="border-b border-slate-100 p-5 dark:border-slate-700"><div className="flex items-center gap-2"><Code2 size={18} className="text-[#7A1420] dark:text-red-300" /><h3 className="font-semibold text-slate-900 dark:text-white">Contrato de entrada do Sischef</h3></div><p className="mt-1 text-xs text-slate-400">Esses campos alimentarão automaticamente a mesma fila usada pela entrada manual</p></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-3 font-medium">Campo Imperial</th><th className="px-4 py-3 font-medium">Informação esperada</th><th className="px-4 py-3 font-medium">Obrigatório</th></tr></thead><tbody>{contratoPedidoSischef.map(item => <tr key={item.imperial} className="border-b border-slate-50 dark:border-slate-700/50"><td className="px-4 py-3 font-mono text-xs text-[#7A1420] dark:text-red-300">{item.imperial}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.descricao}</td><td className="px-4 py-3"><Badge tone={item.obrigatorio ? "amber" : "slate"}>{item.obrigatorio ? "Sim" : "Opcional"}</Badge></td></tr>)}</tbody></table></div><div className="border-t border-slate-100 bg-slate-50 p-4 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/30"><ArrowRight size={13} className="mr-1 inline" />Quando a API for liberada, criaremos um webhook autenticado e idempotente; nenhuma tela operacional precisará ser refeita.</div></Card>
