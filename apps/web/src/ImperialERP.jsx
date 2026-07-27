@@ -10506,7 +10506,10 @@ function ConfiguracoesIntegracoes({ apiStatus }) {
         salvarCredenciaisLocais(novas);
       }
       setCredenciais(prev => ({ ...prev, [plataforma]: { ...prev[plataforma], verificadoEm } }));
-      setFeedbacks(prev => ({ ...prev, [plataforma]: { tone: "green", text: "Credencial protegida e disponível. A API externa ainda não foi acionada." } }));
+      const mensagem = plataforma === "google-maps"
+        ? "Google Maps Routes API conectada e testada com sucesso."
+        : "Credencial protegida e disponível. A API externa ainda não foi acionada.";
+      setFeedbacks(prev => ({ ...prev, [plataforma]: { tone: "green", text: mensagem } }));
     } catch (error) {
       setFeedbacks(prev => ({ ...prev, [plataforma]: { tone: "red", text: error?.message || "A credencial não pôde ser verificada." } }));
     }
