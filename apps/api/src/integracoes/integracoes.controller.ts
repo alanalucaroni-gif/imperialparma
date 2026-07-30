@@ -4,6 +4,7 @@ import { Roles } from "../common/roles.decorator.js";
 import { RolesGuard } from "../common/roles.guard.js";
 import { Role } from "../generated/prisma/enums.js";
 import { SalvarCredencialDto, SalvarWhatsappMetaDto } from "./integracoes.dto.js";
+import { IfoodPedidosService } from "./ifood-pedidos.service.js";
 import { IntegracoesService } from "./integracoes.service.js";
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -44,4 +45,17 @@ export class WhatsappMetaController {
 
   @Delete()
   remover() { return this.integracoes.removerWhatsapp(); }
+}
+
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.GERENTE)
+@Controller("pedidos-venda")
+export class PedidosVendaController {
+  constructor(private readonly ifood: IfoodPedidosService) {}
+
+  @Get()
+  listar() { return this.ifood.listarPedidos(); }
+
+  @Post("reprocessar")
+  reprocessar() { return this.ifood.reprocessarEventosComErro(); }
 }

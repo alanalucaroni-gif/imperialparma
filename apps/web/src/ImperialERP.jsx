@@ -6029,13 +6029,6 @@ const initialOrdensPreparo = [
   { id: "PR-0498", receitaId: "REC-14742", produto: "MACARRÃO SPAGHETTI", lotes: 2, qtd: 14, un: "un", resp: "Cozinha 1", status: "concluidas", criadaEm: "hoje 15:20", concluidaEm: "hoje 16:05" },
 ];
 
-const pedidosVenda = [
-  { id: "#2214", cliente: "João Pedro Alves — Bairro Centro", valor: "R$ 62,90", pagamento: "Pix", status: "em_preparo", data: "hoje 19:42" },
-  { id: "#2213", cliente: "Marina Costa — Jd. das Flores", valor: "R$ 78,40", pagamento: "Cartão", status: "saiu_entrega", data: "hoje 19:31" },
-  { id: "#2212", cliente: "Distribuidora iFood (repasse)", valor: "R$ 341,20", pagamento: "App", status: "entregue", data: "hoje 18:55" },
-  { id: "#2211", cliente: "Carlos Eduardo — Vila Nova", valor: "R$ 45,00", pagamento: "Dinheiro", status: "cancelado", data: "hoje 18:20" },
-];
-
 const fluxoCaixa = [
   { dia: "26/06", saldo: 8.2 }, { dia: "27/06", saldo: 9.1 }, { dia: "28/06", saldo: 7.8 },
   { dia: "29/06", saldo: 10.4 }, { dia: "30/06", saldo: 13.9 }, { dia: "01/07", saldo: 15.2 }, { dia: "02/07", saldo: 14.6 },
@@ -8642,13 +8635,13 @@ function Receitas({ receitas, produtos, categorias, fichas, estoqueItens, onCada
     setFeedback(null);
   }
 
-  function salvarFicha(e) {
+  async function salvarFicha(e) {
     e.preventDefault();
     if (!produtoFicha) {
       setFeedback({ tone: "red", text: "Selecione o produto da ficha técnica." });
       return;
     }
-    const resultado = onSalvarFicha({
+    const resultado = await onSalvarFicha({
       id: fichaEditandoId,
       produtoId: produtoFicha.id,
       prato: produtoFicha.nome,
@@ -8809,30 +8802,45 @@ function Producao({ receitas, estoqueItens, ordens, onCriarOrdem, onAvancarOrdem
   );
 }
 
-function Vendas() {
+function Vendas({ pedidos, carregando, erro, onAtualizar }) {
   const statusTone = { entregue: "green", em_preparo: "amber", saiu_entrega: "brand", cancelado: "red" };
   const statusLabel = { entregue: "Entregue", em_preparo: "Em preparo", saiu_entrega: "Saiu p/ entrega", cancelado: "Cancelado" };
   const statusIcon = { entregue: CheckCircle2, em_preparo: ChefHat, saiu_entrega: Bike, cancelado: XCircle };
+  const agora = new Date();
+  const pedidosMes = pedidos.filter(pedido => {
+    const data = new Date(pedido.criadoEm);
+    return data.getMonth() === agora.getMonth() && data.getFullYear() === agora.getFullYear();
+  });
+  const faturamento = pedidosMes.reduce((total, pedido) => total + Number(pedido.valorTotal || 0), 0);
+  const cancelados = pedidosMes.filter(pedido => pedido.status === "CANCELADO").length;
+  const dinheiro = valor => Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const horario = valor => {
+    const data = new Date(valor);
+    if (Number.isNaN(data.getTime())) return "—";
+    const hoje = data.toDateString() === agora.toDateString();
+    return (hoje ? "hoje " : data.toLocaleDateString("pt-BR") + " ") + data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Pedidos / Vendas</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">R$ 101.400,00 faturados este mês</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{dinheiro(faturamento)} faturados este mês</p>
         </div>
-        <button className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
-          <Plus size={15} /> Novo pedido
+        <button onClick={onAtualizar} disabled={carregando} className="flex items-center gap-1.5 bg-[#7A1420] hover:bg-[#611018] disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+          {carregando ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />} Atualizar pedidos
         </button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPI label="Pedidos (mês)" value="1.842" delta="+120 vs mês anterior" positive icon={ShoppingCart} />
-        <KPI label="Ticket médio" value="R$ 55,10" delta="+2,1%" positive icon={TrendingUp} />
-        <KPI label="Tempo médio de entrega" value="34 min" delta="-4 min vs média" positive icon={Bike} />
-        <KPI label="Cancelamentos" value="1,8%" delta="-0,3 p.p." positive icon={TrendingDown} />
+        <KPI label="Pedidos (mês)" value={String(pedidosMes.length)} delta={`${pedidos.length} no histórico`} positive icon={ShoppingCart} />
+        <KPI label="Faturamento (mês)" value={dinheiro(faturamento)} delta="Pedidos confirmados" positive icon={CircleDollarSign} />
+        <KPI label="Ticket médio" value={dinheiro(pedidosMes.length ? faturamento / pedidosMes.length : 0)} delta="Valor por pedido" positive icon={TrendingUp} />
+        <KPI label="Cancelamentos" value={String(cancelados)} delta={pedidosMes.length ? `${(cancelados * 100 / pedidosMes.length).toFixed(1)}% no mês` : "0% no mês"} positive={cancelados === 0} icon={TrendingDown} />
       </div>
 
+      {erro && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">{erro}</div>}
       <Card className="p-4">
         <div className="overflow-x-auto -mx-4">
           <table className="w-full text-sm min-w-[640px]">
@@ -8847,20 +8855,23 @@ function Vendas() {
               </tr>
             </thead>
             <tbody>
-              {pedidosVenda.map(v => {
-                const Icon = statusIcon[v.status];
+              {!carregando && !pedidos.length && <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-400">Nenhum pedido recebido ainda.</td></tr>}
+              {pedidos.map(v => {
+                const status = String(v.status || "").toLowerCase();
+                const Icon = statusIcon[status] || Clock;
                 return (
                   <tr key={v.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/60 dark:hover:bg-slate-700/20">
-                    <td className="py-3 px-4 font-mono text-xs text-slate-400">{v.id}</td>
+                    <td className="py-3 px-4 font-mono text-xs text-slate-400">#{v.codigo}</td>
                     <td className="py-3 px-4 text-slate-800 dark:text-slate-200 font-medium">
-                      <span className="inline-flex items-center gap-1.5"><MapPin size={12} className="text-slate-400" />{v.cliente}</span>
+                      <span className="inline-flex items-center gap-1.5"><MapPin size={12} className="text-slate-400" />{v.clienteNome}</span>
+                      {v.endereco && <div className="mt-1 pl-5 text-xs font-normal text-slate-400">{v.endereco}</div>}
                     </td>
-                    <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{v.valor}</td>
-                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{v.pagamento}</td>
+                    <td className="py-3 px-4 text-right text-slate-700 dark:text-slate-300">{dinheiro(v.valorTotal)}</td>
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{v.formaPagamento}</td>
                     <td className="py-3 px-4">
-                      <Badge tone={statusTone[v.status]}><span className="inline-flex items-center gap-1"><Icon size={11} /> {statusLabel[v.status]}</span></Badge>
+                      <Badge tone={statusTone[status] || "slate"}><span className="inline-flex items-center gap-1"><Icon size={11} /> {statusLabel[status] || v.status}</span></Badge>
                     </td>
-                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{v.data}</td>
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{horario(v.criadoEm)}</td>
                   </tr>
                 );
               })}
@@ -10943,6 +10954,9 @@ export default function ImperialERP() {
   const [historicoBoleto, setHistoricoBoleto] = useState([]);
   const [historicoXml, setHistoricoXml] = useState([]);
   const [ordens, setOrdens] = useState(initialOrdensPreparo);
+  const [pedidosVenda, setPedidosVenda] = useState([]);
+  const [pedidosVendaCarregando, setPedidosVendaCarregando] = useState(false);
+  const [pedidosVendaErro, setPedidosVendaErro] = useState("");
   const [caixas, setCaixas] = useState(initialCaixas);
   const [movimentosCaixa, setMovimentosCaixa] = useState(initialMovimentosCaixa);
   const [entregadores, setEntregadores] = useState(() => {
@@ -11013,6 +11027,44 @@ export default function ImperialERP() {
 
   useEffect(() => { syncFromApi(); }, []);
   useEffect(() => { if (active === "estoque") syncFromApi(); }, [active]);
+  useEffect(() => { if (active === "vendas") syncPedidosVenda(); }, [active]);
+  useEffect(() => {
+    if (apiStatus !== "online") return;
+    const pendentes = fichas.filter(ficha => String(ficha.id).startsWith("FT-MAN-") && !ficha.backendId);
+    if (!pendentes.length) return;
+    let cancelado = false;
+    (async () => {
+      for (const ficha of pendentes) {
+        try {
+          const salva = await salvarFichaNoServidor(ficha);
+          if (!cancelado) {
+            setFichas(prev => salvarCadastroLocal(
+              "imperial.technicalSheets.v1",
+              prev.map(item => item.id === ficha.id ? { ...item, id: salva.id, backendId: salva.id } : item),
+            ));
+          }
+        } catch (error) {
+          console.warn("Não foi possível sincronizar a ficha técnica manual.", error);
+        }
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [apiStatus, fichas, estoqueItens, produtos]);
+
+  async function syncPedidosVenda() {
+    if (!api.enabled) return;
+    setPedidosVendaCarregando(true);
+    setPedidosVendaErro("");
+    try {
+      await api.ensureSession();
+      const resposta = await api.getPedidosVenda();
+      setPedidosVenda(Array.isArray(resposta?.data) ? resposta.data : []);
+    } catch (error) {
+      setPedidosVendaErro(error?.message || "Não foi possível carregar os pedidos reais.");
+    } finally {
+      setPedidosVendaCarregando(false);
+    }
+  }
 
   function persistirItensEstoquePersonalizados(itens) {
     try {
@@ -11327,17 +11379,67 @@ export default function ImperialERP() {
     return { tone: "green", text: "Categoria " + categoria.nome + (dados.id ? " atualizada." : " cadastrada.") };
   }
 
-  function handleSalvarFicha(dados) {
+  async function salvarFichaNoServidor(dados) {
+    const produto = produtos.find(item => item.id === dados.produtoId)
+      || produtos.find(item => normalizeTxt(item.nome) === normalizeTxt(dados.prato));
+    const produtoFinal = estoqueItens.find(item => item.cod === produto?.estoqueCod)
+      || estoqueItens.find(item => normalizeTxt(item.nome) === normalizeTxt(dados.prato));
+    if (!produtoFinal?.id) {
+      throw new Error("Vincule o produto da ficha a um item ativo do estoque antes de salvar.");
+    }
+    const itens = dados.insumos.map((insumo) => {
+      const itemEstoque = estoqueItens.find(item => item.cod === insumo.cod);
+      if (!itemEstoque?.id) throw new Error("O insumo " + insumo.nome + " ainda não está sincronizado com o estoque.");
+      return {
+        insumoId: itemEstoque.id,
+        nome: insumo.nome,
+        quantidade: Number(insumo.qtd),
+        unidade: insumo.un,
+        custoUnitario: Number(itemEstoque.custo || 0),
+      };
+    });
+    const nome = dados.nomeSichef?.trim() || dados.prato.trim();
+    const consulta = await api.getReceitas({ busca: nome, status: "todos", limit: 200 });
+    const receitas = Array.isArray(consulta?.data) ? consulta.data : [];
+    const existente = receitas.find(receita => receita.produtoFinalId === produtoFinal.id)
+      || receitas.find(receita => normalizeTxt(receita.nome) === normalizeTxt(nome));
+    const payload = {
+      nome,
+      produtoFinalId: produtoFinal.id,
+      categoria: dados.categoria || produtoFinal.cat,
+      rendimento: 1,
+      unidadeRendimento: produtoFinal.un || "un",
+      observacoes: "Ficha técnica de venda sincronizada pelo ERP.",
+      ativo: true,
+      itens,
+    };
+    const salva = existente
+      ? api.atualizarReceita(existente.id, payload)
+      : api.cadastrarReceita(payload);
+    const resultado = await salva;
+    await api.reprocessarPedidosIfood();
+    return resultado;
+  }
+
+  async function handleSalvarFicha(dados) {
     if (!dados.produtoId || !dados.prato) return { tone: "red", text: "Selecione o produto da ficha técnica." };
     if (!dados.insumos.length) return { tone: "red", text: "Adicione pelo menos um insumo à ficha técnica." };
     if (fichas.some(ficha => ficha.id !== dados.id && (ficha.produtoId === dados.produtoId || normalizeTxt(ficha.prato) === normalizeTxt(dados.prato)))) {
       return { tone: "red", text: "Este produto já possui uma ficha técnica." };
     }
+    let salvaNoServidor = null;
+    if (apiStatus === "online") {
+      try {
+        salvaNoServidor = await salvarFichaNoServidor(dados);
+      } catch (error) {
+        return { tone: "red", text: error?.message || "Não foi possível salvar a ficha técnica no servidor." };
+      }
+    }
     if (dados.id) {
       setFichas(prev => salvarCadastroLocal(
         "imperial.technicalSheets.v1",
         prev.map(ficha => ficha.id === dados.id
-          ? { ...ficha, ...dados, revisaoPendente: null, observacao: "Ficha atualizada manualmente no ERP." }
+          ? { ...ficha, ...dados, ...(salvaNoServidor ? { id: salvaNoServidor.id, backendId: salvaNoServidor.id } : {}), revisaoPendente: null, observacao: "Ficha atualizada manualmente no ERP." }
           : ficha),
       ));
       return { tone: "green", text: "Ficha técnica de " + dados.prato + " atualizada." };
@@ -11345,6 +11447,7 @@ export default function ImperialERP() {
     const nova = {
       id: "FT-MAN-" + Date.now().toString(36).toUpperCase(),
       ...dados,
+      ...(salvaNoServidor ? { id: salvaNoServidor.id, backendId: salvaNoServidor.id } : {}),
       revisaoPendente: null,
       observacao: "Ficha cadastrada manualmente no ERP.",
     };
@@ -12016,7 +12119,7 @@ export default function ImperialERP() {
                 ) : <ReceitasProducao onEstoqueAlterado={syncFromApi} />}
               </div>
             )}
-            {active === "vendas" && <Vendas />}
+            {active === "vendas" && <Vendas pedidos={pedidosVenda} carregando={pedidosVendaCarregando} erro={pedidosVendaErro} onAtualizar={syncPedidosVenda} />}
             {active === "entregas" && (
               <EntregasMotos
                 entregadores={entregadores}
