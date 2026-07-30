@@ -25,7 +25,6 @@ enum MovimentacaoTipo {
   SAIDA
   AJUSTE
   PRODUCAO
-  VENDA
 }
 
 enum ContaStatus {
@@ -115,6 +114,7 @@ enum EntradaOrigem {
   PEDIDO_COMPRA
   AJUSTE
   PRODUCAO
+  VENDA
 }
 
 enum LogisticaPedidoStatus {
