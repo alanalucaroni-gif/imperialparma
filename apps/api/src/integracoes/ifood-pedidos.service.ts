@@ -56,6 +56,11 @@ const CODIGOS_CANCELADO = new Set(["CAN", "CANCELLED", "CANCELED"]);
 const numero = (valor: unknown) => Number(valor || 0);
 const texto = (valor: unknown) => typeof valor === "string" ? valor.trim() : "";
 const arredondar = (valor: number) => Number(valor.toFixed(3));
+const normalizarNome = (valor: unknown) => texto(valor)
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\s+/g, " ")
+  .toLocaleLowerCase("pt-BR");
 
 @Injectable()
 export class IfoodPedidosService {
@@ -66,6 +71,43 @@ export class IfoodPedidosService {
     private readonly prisma: PrismaService,
     private readonly integracoes: IntegracoesService,
   ) {}
+
+  async listarPedidos() {
+    const pedidos = await this.prisma.pedido.findMany({
+      orderBy: { criadoEm: "desc" },
+      take: 200,
+      include: { itens: { orderBy: { id: "asc" } } },
+    });
+    return {
+      data: pedidos.map((pedido) => ({
+        ...pedido,
+        valorTotal: numero(pedido.valorTotal),
+        itens: pedido.itens.map((item) => ({
+          ...item,
+          quantidade: numero(item.quantidade),
+          valorUnitario: numero(item.valorUnitario),
+        })),
+      })),
+      meta: { total: pedidos.length },
+    };
+  }
+
+  async reprocessarEventosComErro() {
+    const eventos = await this.prisma.ifoodEvento.findMany({
+      where: { status: "ERRO" },
+      orderBy: { criadoEm: "asc" },
+      take: 50,
+      select: { id: true },
+    });
+    const resultados = await Promise.allSettled(
+      eventos.map((evento) => this.processarEvento(evento.id)),
+    );
+    return {
+      encontrados: eventos.length,
+      processados: resultados.filter((resultado) => resultado.status === "fulfilled").length,
+      pendentes: resultados.filter((resultado) => resultado.status === "rejected").length,
+    };
+  }
 
   async registrarEvento(payload: EventoIfood) {
     const codigo = texto(payload.code).toUpperCase();
@@ -233,6 +275,44 @@ export class IfoodPedidosService {
     } : null;
   }
 
+  private async buscarReceitaDoItem(tx: Prisma.TransactionClient, item: ItemIfood) {
+    const externalCode = texto(item.externalCode);
+    const nome = texto(item.name);
+    const include = { itens: { include: { insumo: true } } } as const;
+
+    if (externalCode) {
+      const porCodigo = await tx.receita.findFirst({
+        where: {
+          ativo: true,
+          OR: [
+            { codigo: { equals: externalCode, mode: "insensitive" } },
+            { produtoFinal: { is: { codigo: { equals: externalCode, mode: "insensitive" } } } },
+          ],
+        },
+        include,
+      });
+      if (porCodigo) return porCodigo;
+    }
+
+    if (!nome) return null;
+    const nomeNormalizado = normalizarNome(nome);
+    const candidatas = await tx.receita.findMany({
+      where: { ativo: true },
+      include: {
+        ...include,
+        produtoFinal: { select: { nome: true } },
+      },
+    });
+    const correspondencias = candidatas.filter((receita) =>
+      normalizarNome(receita.nome) === nomeNormalizado
+      || normalizarNome(receita.produtoFinal?.nome) === nomeNormalizado
+    );
+    if (correspondencias.length > 1) {
+      throw new Error(`Mais de uma ficha técnica corresponde ao produto do iFood: ${nome}.`);
+    }
+    return correspondencias[0] || null;
+  }
+
   private async registrarPedidoConfirmado(pedidoIfood: PedidoIfood) {
     const codigo = texto(pedidoIfood.displayId) || pedidoIfood.id;
     const itens = this.itensComOpcoes(pedidoIfood.items || []).filter((item) => numero(item.quantity) > 0);
@@ -248,22 +328,7 @@ export class IfoodPedidosService {
       for (const item of itens) {
         const externalCode = texto(item.externalCode);
         const nome = texto(item.name);
-        const receita = await tx.receita.findFirst({
-          where: {
-            ativo: true,
-            OR: [
-              ...(externalCode ? [
-                { codigo: { equals: externalCode, mode: "insensitive" as const } },
-                { produtoFinal: { is: { codigo: { equals: externalCode, mode: "insensitive" as const } } } },
-              ] : []),
-              ...(nome ? [
-                { nome: { equals: nome, mode: "insensitive" as const } },
-                { produtoFinal: { is: { nome: { equals: nome, mode: "insensitive" as const } } } },
-              ] : []),
-            ],
-          },
-          include: { itens: { include: { insumo: true } } },
-        });
+        const receita = await this.buscarReceitaDoItem(tx, item);
         if (!receita) {
           throw new Error(`Produto do iFood sem ficha técnica vinculada: ${nome || externalCode || item.id}.`);
         }
