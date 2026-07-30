@@ -146,6 +146,8 @@ class ImperialApi {
   atualizarInsumo(codigo: string, body: any) { return this.request<any>(`/estoque/insumos/${codigo}`, { method: "PATCH", body: JSON.stringify(body) }); }
   excluirInsumo(codigo: string) { return this.request<any>(`/estoque/insumos/${codigo}`, { method: "DELETE" }); }
   getMovimentacoes() { return this.request<any>("/estoque/movimentacoes?limit=20"); }
+  getPedidosVenda() { return this.request<any>("/pedidos-venda"); }
+  reprocessarPedidosIfood() { return this.request<any>("/pedidos-venda/reprocessar", { method: "POST" }); }
   registrarMovimentacaoEstoque(body: any) { return this.request<any>("/estoque/movimentacoes", { method: "POST", body: JSON.stringify(body) }); }
   atualizarEstoqueMinimo(codigo: string, minimo: number) { return this.request<any>(`/estoque/insumos/${codigo}/minimo`, { method: "PATCH", body: JSON.stringify({ minimo }) }); }
   getPainelCotacoes() { return this.request<any>("/cotacoes/painel"); }
