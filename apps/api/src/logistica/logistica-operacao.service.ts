@@ -49,11 +49,23 @@ const TRANSICOES: Record<LogisticaPedidoStatus, LogisticaPedidoStatus[]> = {
     LogisticaPedidoStatus.CANCELADO,
   ],
   COLETA: [
+    LogisticaPedidoStatus.NA_LOJA,
+    LogisticaPedidoStatus.EM_ROTA,
+    LogisticaPedidoStatus.PROBLEMA,
+    LogisticaPedidoStatus.CANCELADO,
+  ],
+  NA_LOJA: [
     LogisticaPedidoStatus.EM_ROTA,
     LogisticaPedidoStatus.PROBLEMA,
     LogisticaPedidoStatus.CANCELADO,
   ],
   EM_ROTA: [
+    LogisticaPedidoStatus.NO_DESTINO,
+    LogisticaPedidoStatus.ENTREGUE,
+    LogisticaPedidoStatus.PROBLEMA,
+    LogisticaPedidoStatus.RETORNANDO,
+  ],
+  NO_DESTINO: [
     LogisticaPedidoStatus.ENTREGUE,
     LogisticaPedidoStatus.PROBLEMA,
     LogisticaPedidoStatus.RETORNANDO,
@@ -83,6 +95,7 @@ const incluirPedido = {
   entregador: true,
   etapas: { orderBy: { criadoEm: "asc" as const } },
   ocorrencias: { orderBy: { criadoEm: "desc" as const } },
+  localizacoes: { orderBy: { registradoEm: "desc" as const }, take: 1 },
 };
 
 const texto = (valor?: string | null) => valor?.trim() || null;
@@ -487,9 +500,11 @@ export class LogisticaOperacaoService {
 
   private timestampsParaStatus(status: LogisticaPedidoStatus, agora: Date) {
     if (status === LogisticaPedidoStatus.COLETA) return { atribuidoEm: agora };
+    if (status === LogisticaPedidoStatus.NA_LOJA) return { chegouLojaEm: agora };
     if (status === LogisticaPedidoStatus.EM_ROTA) {
       return { coletadoEm: agora, saiuEntregaEm: agora };
     }
+    if (status === LogisticaPedidoStatus.NO_DESTINO) return { chegouDestinoEm: agora };
     if (status === LogisticaPedidoStatus.ENTREGUE) return { entregueEm: agora };
     if (status === LogisticaPedidoStatus.CANCELADO) return { canceladoEm: agora };
     return {};
@@ -565,6 +580,14 @@ export class LogisticaOperacaoService {
       distanciaCobradaKm: numero(pedido.distanciaCobradaKm),
       custoEstimado: numero(pedido.custoEstimado) || 0,
       custoReal: numero(pedido.custoReal),
+      ultimaLocalizacao: pedido.localizacoes?.length ? {
+        latitude: Number(pedido.localizacoes[0].latitude),
+        longitude: Number(pedido.localizacoes[0].longitude),
+        precisaoMetros: pedido.localizacoes[0].precisaoMetros,
+        velocidadeKmh: pedido.localizacoes[0].velocidadeKmh,
+        direcaoGraus: pedido.localizacoes[0].direcaoGraus,
+        registradoEm: pedido.localizacoes[0].registradoEm,
+      } : null,
       entregador: pedido.entregador ? {
         id: pedido.entregador.codigoExterno || pedido.entregador.id,
         bancoId: pedido.entregador.id,
@@ -583,6 +606,7 @@ export class LogisticaOperacaoService {
       ocorrencia: ocorrenciaAberta?.descricao || null,
       ocorrencias: pedido.ocorrencias || [],
       etapas: undefined,
+      localizacoes: undefined,
     };
   }
 }

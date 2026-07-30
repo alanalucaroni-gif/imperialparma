@@ -196,6 +196,23 @@ class ImperialApi {
   atualizarStatusPedidoLogistica(id: string, body: any) {
     return this.request<any>(`/logistica/pedidos/${id}/status`, { method: "PATCH", body: JSON.stringify(body) });
   }
+  gerarLinksPedidoLogistica(id: string) {
+    return this.request<any>(`/logistica/pedidos/${id}/links`, { method: "POST" });
+  }
+  getPainelEntregadorLogistica(token: string) {
+    return this.request<any>(`/logistica-entregador/${encodeURIComponent(token)}`);
+  }
+  atualizarEtapaEntregadorLogistica(token: string, body: { status: string; descricao?: string }) {
+    return this.request<any>(`/logistica-entregador/${encodeURIComponent(token)}/status`, { method: "PATCH", body: JSON.stringify(body) });
+  }
+  registrarLocalizacaoEntregadorLogistica(token: string, body: {
+    latitude: number; longitude: number; precisaoMetros?: number; velocidadeKmh?: number; direcaoGraus?: number;
+  }) {
+    return this.request<any>(`/logistica-entregador/${encodeURIComponent(token)}/localizacao`, { method: "POST", body: JSON.stringify(body) });
+  }
+  getRastreioPublicoLogistica(token: string) {
+    return this.request<any>(`/logistica-publica/rastreio/${encodeURIComponent(token)}`);
+  }
   registrarOcorrenciaLogistica(id: string, body: { tipo?: string; descricao: string }) {
     return this.request<any>(`/logistica/pedidos/${id}/ocorrencias`, { method: "POST", body: JSON.stringify(body) });
   }

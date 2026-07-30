@@ -122,7 +122,9 @@ enum LogisticaPedidoStatus {
   EM_PREPARO
   PRONTO
   COLETA
+  NA_LOJA
   EM_ROTA
+  NO_DESTINO
   ENTREGUE
   PROBLEMA
   CANCELADO
@@ -865,8 +867,10 @@ model LogisticaPedido {
   entregadorId           String?
   entregador             LogisticaEntregador?   @relation(fields: [entregadorId], references: [id], onDelete: SetNull)
   atribuidoEm            DateTime?
+  chegouLojaEm           DateTime?
   coletadoEm             DateTime?
   saiuEntregaEm          DateTime?
+  chegouDestinoEm        DateTime?
   entregueEm             DateTime?
   canceladoEm            DateTime?
   criadoPorUsuarioId     String?

@@ -22,6 +22,7 @@ import {
   SalvarConfiguracaoLogisticaDto,
 } from "./logistica.dto.js";
 import { LogisticaOperacaoService } from "./logistica-operacao.service.js";
+import { LogisticaRastreamentoService } from "./logistica-rastreamento.service.js";
 import { LogisticaService } from "./logistica.service.js";
 
 @UseGuards(JwtAuthGuard)
@@ -30,6 +31,7 @@ export class LogisticaController {
   constructor(
     private readonly logistica: LogisticaService,
     private readonly operacao: LogisticaOperacaoService,
+    private readonly rastreamento: LogisticaRastreamentoService,
   ) {}
 
   @Post("calcular-distancia")
@@ -74,6 +76,17 @@ export class LogisticaController {
   @Get("pedidos/:id")
   buscarPedido(@Param("id") id: string) {
     return this.operacao.buscar(id);
+  }
+
+  @Post("pedidos/:id/links")
+  gerarLinks(
+    @Param("id") id: string,
+    @Req() request: { headers?: { origin?: string } },
+  ) {
+    return this.rastreamento.gerarLinksTemporarios(
+      id,
+      request.headers?.origin,
+    );
   }
 
   @Patch("pedidos/:id/status")

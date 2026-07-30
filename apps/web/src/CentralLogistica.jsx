@@ -8,10 +8,14 @@ import {
   CheckCircle2,
   Clock3,
   Code2,
+  Copy,
+  ExternalLink,
+  Link2,
   MapPin,
   Navigation,
   PackageCheck,
   Plus,
+  Radio,
   RefreshCw,
   Route,
   Search,
@@ -42,7 +46,9 @@ const statusConfig = {
   EM_PREPARO: { label: "Em preparo", tone: "amber" },
   PRONTO: { label: "Pronto para despacho", tone: "blue" },
   COLETA: { label: "Aguardando coleta", tone: "blue" },
+  NA_LOJA: { label: "Entregador na loja", tone: "blue" },
   EM_ROTA: { label: "Em rota", tone: "brand" },
+  NO_DESTINO: { label: "No destino", tone: "brand" },
   ENTREGUE: { label: "Entregue", tone: "green" },
   PROBLEMA: { label: "Com problema", tone: "red" },
   RETORNANDO: { label: "Retornando", tone: "amber" },
@@ -119,7 +125,9 @@ const statusLogisticaValidos = new Set([
   "EM_PREPARO",
   "PRONTO",
   "COLETA",
+  "NA_LOJA",
   "EM_ROTA",
+  "NO_DESTINO",
   "ENTREGUE",
   "PROBLEMA",
   "CANCELADO",
@@ -217,11 +225,14 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
   const [atribuicoes, setAtribuicoes] = useState({});
   const [busca, setBusca] = useState("");
   const [feedback, setFeedback] = useState(null);
+  const [linksPedido, setLinksPedido] = useState(null);
+  const [gerandoLinksId, setGerandoLinksId] = useState("");
   const [rotaFeedback, setRotaFeedback] = useState(null);
   const [rotaCalculada, setRotaCalculada] = useState(null);
   const [calculandoDistancia, setCalculandoDistancia] = useState(false);
   const [carregandoDados, setCarregandoDados] = useState(api.enabled);
   const requisicaoRota = useRef(0);
+  const entregasRegistradas = useRef(new Set());
 
   useEffect(() => {
     if (!api.enabled) return undefined;
@@ -288,10 +299,51 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     return () => { montado = false; };
   }, []);
 
+  useEffect(() => {
+    if (!api.enabled) return undefined;
+    let montado = true;
+    const atualizarPainel = async () => {
+      try {
+        const lista = await api.getPedidosLogistica({ limit: 200 });
+        if (montado) setPedidos(lista.data || []);
+      } catch {
+        // A sincronizacao inicial exibe o erro; o painel tenta novamente.
+      }
+    };
+    const timer = window.setInterval(atualizarPainel, 10_000);
+    return () => {
+      montado = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof onConcluirEntrega !== "function") return;
+    pedidos
+      .filter(pedido => pedido.status === "ENTREGUE" && pedido.entregador)
+      .forEach(pedido => {
+        if (entregasRegistradas.current.has(pedido.id)) return;
+        entregasRegistradas.current.add(pedido.id);
+        const resultado = onConcluirEntrega({
+          pedido,
+          entregador: {
+            id: pedido.entregador.id,
+            nome: pedido.entregador.nome,
+            tipo: pedido.entregador.empresa,
+          },
+          custo: Number(pedido.custoReal ?? pedido.custoEstimado ?? 0),
+        });
+        if (resultado?.tone === "red") {
+          entregasRegistradas.current.delete(pedido.id);
+          setFeedback(resultado);
+        }
+      });
+  }, [pedidos, onConcluirEntrega]);
+
   const ativos = entregadores.filter(item => item.ativo);
   const bairros = useMemo(() => [...new Set(tarifas.map(item => item.bairro).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "pt-BR")), [tarifas]);
-  const ocupados = new Set(pedidos.filter(item => ["COLETA", "EM_ROTA", "PROBLEMA", "RETORNANDO"].includes(item.status)).map(item => item.entregador?.id).filter(Boolean));
+  const ocupados = new Set(pedidos.filter(item => ["COLETA", "NA_LOJA", "EM_ROTA", "NO_DESTINO", "PROBLEMA", "RETORNANDO"].includes(item.status)).map(item => item.entregador?.id).filter(Boolean));
   const disponiveis = ativos.filter(item => !ocupados.has(item.id));
 
   const pedidosFiltrados = useMemo(() => {
@@ -303,14 +355,14 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
 
   const grupos = {
     AGUARDANDO: pedidosFiltrados.filter(item => ["AGUARDANDO", "EM_PREPARO", "PRONTO"].includes(item.status)),
-    COLETA: pedidosFiltrados.filter(item => item.status === "COLETA"),
-    EM_ROTA: pedidosFiltrados.filter(item => ["EM_ROTA", "PROBLEMA", "RETORNANDO"].includes(item.status)),
+    COLETA: pedidosFiltrados.filter(item => ["COLETA", "NA_LOJA"].includes(item.status)),
+    EM_ROTA: pedidosFiltrados.filter(item => ["EM_ROTA", "NO_DESTINO", "PROBLEMA", "RETORNANDO"].includes(item.status)),
     ENTREGUE: pedidosFiltrados.filter(item => ["ENTREGUE", "CANCELADO"].includes(item.status)).slice(0, 20),
   };
 
   const entreguesHoje = pedidos.filter(item => item.status === "ENTREGUE" && hoje(item.entregueEm));
   const gastoHoje = entreguesHoje.reduce((total, item) => total + Number(item.custoReal ?? item.custoEstimado ?? 0), 0);
-  const emOperacao = pedidos.filter(item => ["COLETA", "EM_ROTA", "PROBLEMA", "RETORNANDO"].includes(item.status));
+  const emOperacao = pedidos.filter(item => ["COLETA", "NA_LOJA", "EM_ROTA", "NO_DESTINO", "PROBLEMA", "RETORNANDO"].includes(item.status));
   const atrasados = emOperacao.filter(item => Date.now() - new Date(item.atualizadoEm).getTime() > 45 * 60 * 1000);
 
   function atualizarPedidosLocal(transformar) {
@@ -502,6 +554,40 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     }
   }
 
+  async function abrirLinks(pedido) {
+    if (!api.enabled) {
+      setFeedback({ tone: "red", text: "Os links móveis exigem a API publicada." });
+      return;
+    }
+    setGerandoLinksId(pedido.id);
+    try {
+      const links = await api.gerarLinksPedidoLogistica(pedido.id);
+      setLinksPedido(links);
+      setFeedback({ tone: "green", text: `Links seguros de ${pedido.codigoPedido} gerados com sucesso.` });
+    } catch (error) {
+      setFeedback({ tone: "red", text: mensagemErro(error, "Não foi possível gerar os links da entrega.") });
+    } finally {
+      setGerandoLinksId("");
+    }
+  }
+
+  async function copiarLink(url, nome) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setFeedback({ tone: "green", text: `${nome} copiado para a área de transferência.` });
+    } catch {
+      setFeedback({ tone: "red", text: "Não foi possível copiar automaticamente. Selecione o endereço do campo." });
+    }
+  }
+
+  function compartilharRastreioWhatsapp() {
+    if (!linksPedido?.rastreioUrl) return;
+    const mensagem = encodeURIComponent(
+      `Olá! Acompanhe a entrega ${linksPedido.codigoPedido} da Imperial Parma: ${linksPedido.rastreioUrl}`,
+    );
+    window.open(`https://wa.me/?text=${mensagem}`, "_blank", "noopener,noreferrer");
+  }
+
   async function despachar(pedido) {
     const entregadorId = atribuicoes[pedido.id];
     const entregador = ativos.find(item => item.id === entregadorId);
@@ -527,6 +613,7 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     });
     if (atualizado) {
       setFeedback({ tone: "green", text: `${pedido.codigoPedido} atribuído a ${entregador.nome} por ${dinheiro(custo.valor)} (${descricaoCusto}).` });
+      await abrirLinks(pedido);
     }
   }
 
@@ -579,15 +666,17 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
         <div className="flex items-center gap-1.5"><Route size={13} /><span>{Number(pedido.distanciaKm).toLocaleString("pt-BR")} km de ida{pedido.origemValor !== "tabela" && Number(pedido.distanciaCobradaKm || pedido.distanciaKm) !== Number(pedido.distanciaKm) ? ` · ${Number(pedido.distanciaCobradaKm).toLocaleString("pt-BR")} km pagos` : ""} · custo {dinheiro(pedido.custoEstimado)} ({origemCusto})</span></div>
         <div className="flex items-center gap-1.5"><Wallet size={13} /><span>Pedido {dinheiro(pedido.valorPedido)} · taxa cliente {dinheiro(pedido.taxaEntregaCliente)} · saldo <strong className={saldoEntrega >= 0 ? "text-emerald-600" : "text-rose-600"}>{dinheiro(saldoEntrega)}</strong></span></div>
         {pedido.entregador && <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300"><Bike size={13} />{pedido.entregador.nome} · {pedido.entregador.empresa}</div>}
+        {pedido.ultimaLocalizacao && <a href={`https://www.google.com/maps?q=${pedido.ultimaLocalizacao.latitude},${pedido.ultimaLocalizacao.longitude}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-sky-600"><Radio size={13} />GPS recebido às {hora(pedido.ultimaLocalizacao.registradoEm)} <ExternalLink size={11} /></a>}
         <div className="flex items-center gap-1.5 text-slate-400"><Clock3 size={13} />Atualizado às {hora(pedido.atualizadoEm)}</div>
         {pedido.ocorrencia && <div className="rounded-lg bg-rose-50 p-2 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"><AlertTriangle size={12} className="mr-1 inline" />{pedido.ocorrencia}</div>}
       </div>
 
       {pedido.status === "EM_PREPARO" && <button type="button" onClick={async () => { const ok = await alterarStatus(pedido.id, "PRONTO", "Pedido pronto para retirada."); if (ok) setFeedback({ tone: "green", text: `${pedido.codigoPedido} está pronto para despacho.` }); }} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Marcar como pronto</button>}
       {["AGUARDANDO", "PRONTO"].includes(pedido.status) && <div className="mt-3 flex gap-2"><select value={atribuicoes[pedido.id] || ""} onChange={evento => setAtribuicoes(atual => ({ ...atual, [pedido.id]: evento.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"><option value="">Selecionar entregador</option>{ativos.map(item => <option key={item.id} value={item.id} disabled={ocupados.has(item.id)}>{rotuloEntregador(item, pedido)}{ocupados.has(item.id) ? " · ocupado" : ""}</option>)}</select><button type="button" onClick={() => despachar(pedido)} className="rounded-lg bg-[#7A1420] px-3 py-2 text-xs font-medium text-white">Despachar</button></div>}
-      {pedido.status === "COLETA" && <div className="mt-3 flex gap-2"><button type="button" onClick={() => confirmarColeta(pedido)} className={cx(primaryButton, "flex-1 py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Confirmar coleta</button><button type="button" onClick={() => cancelarPedido(pedido)} className="rounded-lg border border-rose-200 px-3 text-xs text-rose-600"><XCircle size={14} /></button></div>}
-      {pedido.status === "EM_ROTA" && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => concluirEntrega(pedido)} className={cx(primaryButton, "py-2 text-xs")}><CheckCircle2 size={13} className="mr-1 inline" />Concluir</button><button type="button" onClick={() => registrarProblema(pedido)} className="rounded-lg border border-amber-200 px-3 py-2 text-xs text-amber-700"><AlertTriangle size={13} className="mr-1 inline" />Problema</button></div>}
+      {["COLETA", "NA_LOJA"].includes(pedido.status) && <div className="mt-3 flex gap-2"><button type="button" onClick={() => confirmarColeta(pedido)} className={cx(primaryButton, "flex-1 py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Confirmar saída</button><button type="button" onClick={() => cancelarPedido(pedido)} className="rounded-lg border border-rose-200 px-3 text-xs text-rose-600"><XCircle size={14} /></button></div>}
+      {["EM_ROTA", "NO_DESTINO"].includes(pedido.status) && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => concluirEntrega(pedido)} className={cx(primaryButton, "py-2 text-xs")}><CheckCircle2 size={13} className="mr-1 inline" />Concluir</button><button type="button" onClick={() => registrarProblema(pedido)} className="rounded-lg border border-amber-200 px-3 py-2 text-xs text-amber-700"><AlertTriangle size={13} className="mr-1 inline" />Problema</button></div>}
       {pedido.status === "PROBLEMA" && <button type="button" onClick={async () => { const ok = await alterarStatus(pedido.id, "EM_ROTA", "Entrega retomada após ocorrência.", { ocorrencia: null }); if (ok) setFeedback({ tone: "green", text: `${pedido.codigoPedido} retomou a rota.` }); }} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><RefreshCw size={13} className="mr-1 inline" />Retomar entrega</button>}
+      {pedido.entregador && !["ENTREGUE", "CANCELADO"].includes(pedido.status) && <button type="button" disabled={gerandoLinksId === pedido.id} onClick={() => abrirLinks(pedido)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-sky-200 px-3 py-2 text-xs font-medium text-sky-700 disabled:opacity-50"><Link2 size={13} />{gerandoLinksId === pedido.id ? "Gerando..." : "Links e rastreio"}</button>}
     </div>;
   }
 
@@ -610,6 +699,17 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
 
     {carregandoDados && <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300">Sincronizando pedidos, etapas e configurações com o banco de dados...</div>}
     {feedback && <div className={cx("rounded-xl border px-4 py-3 text-sm", feedback.tone === "green" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300" : feedback.tone === "red" ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300" : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300")}>{feedback.text}</div>}
+
+    {linksPedido && <Card className="overflow-hidden border-sky-200 dark:border-sky-500/30">
+      <div className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50 p-4 dark:border-sky-500/20 dark:bg-sky-500/10">
+        <div><div className="flex items-center gap-2 font-semibold text-sky-900 dark:text-sky-200"><Link2 size={17} />Links móveis · {linksPedido.codigoPedido}</div><p className="mt-1 text-xs text-sky-700 dark:text-sky-300">Envie o primeiro ao entregador e o segundo ao cliente.</p></div>
+        <button type="button" onClick={() => setLinksPedido(null)} className="text-sky-500"><XCircle size={18} /></button>
+      </div>
+      <div className="grid gap-3 p-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Entregador · expira em 48h</p><p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">{linksPedido.entregador}</p></div><div className="flex gap-1"><button type="button" onClick={() => copiarLink(linksPedido.entregadorUrl, "Link do entregador")} className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Copiar link"><Copy size={15} /></button><a href={linksPedido.entregadorUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Abrir painel"><ExternalLink size={15} /></a></div></div><input readOnly value={linksPedido.entregadorUrl} className="mt-3 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500 dark:bg-slate-900/50" /></div>
+        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Cliente · expira em 7 dias</p><p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">Acompanhamento somente leitura</p></div><div className="flex gap-1"><button type="button" onClick={() => copiarLink(linksPedido.rastreioUrl, "Link de rastreio")} className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Copiar link"><Copy size={15} /></button><a href={linksPedido.rastreioUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Abrir rastreio"><ExternalLink size={15} /></a></div></div><input readOnly value={linksPedido.rastreioUrl} className="mt-3 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500 dark:bg-slate-900/50" /><button type="button" onClick={compartilharRastreioWhatsapp} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white">Enviar rastreio pelo WhatsApp</button></div>
+      </div>
+    </Card>}
 
     {aba === "painel" && <>
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
@@ -648,7 +748,7 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     {aba === "integracao" && <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
       <div className="flex flex-col gap-4">
         <Card className="p-5"><div className="flex items-center gap-2"><Settings2 size={18} className="text-[#7A1420] dark:text-red-300" /><h3 className="font-semibold text-slate-900 dark:text-white">Parâmetros da frota própria</h3></div><p className="mb-4 mt-1 text-xs text-slate-400">A distância parte sempre do endereço da loja</p><form onSubmit={salvarConfiguracao} className="space-y-3"><label className="text-xs text-slate-500">Endereço de saída<input value={configuracao.enderecoOrigem} onChange={evento => setConfiguracao(atual => ({ ...atual, enderecoOrigem: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Quilometragem paga<select value={configuracao.tipoCalculoDistancia} onChange={evento => setConfiguracao(atual => ({ ...atual, tipoCalculoDistancia: evento.target.value }))} className={inputClass}><option value="ida">Somente ida (loja → cliente)</option><option value="ida_volta">Ida e volta (loja → cliente → loja)</option></select></label><label className="text-xs text-slate-500">Valor por quilômetro<input inputMode="decimal" value={configuracao.valorKm} onChange={evento => setConfiguracao(atual => ({ ...atual, valorKm: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Valor mínimo por entrega<input inputMode="decimal" value={configuracao.valorMinimo} onChange={evento => setConfiguracao(atual => ({ ...atual, valorMinimo: evento.target.value }))} className={inputClass} /></label><label className="text-xs text-slate-500">Raio máximo (km)<input inputMode="decimal" value={configuracao.raioMaximoKm} onChange={evento => setConfiguracao(atual => ({ ...atual, raioMaximoKm: evento.target.value }))} className={inputClass} /></label><button className={cx(primaryButton, "w-full")}>Salvar parâmetros</button></form></Card>
-        <Card className="p-5"><Navigation size={20} className="text-sky-600" /><h3 className="mt-2 font-semibold text-slate-900 dark:text-white">Rastreamento GPS</h3><p className="mt-2 text-sm text-slate-500">Estrutura reservada para o aplicativo do entregador enviar localização, disponibilidade e status em tempo real.</p><Badge tone="blue">Próxima etapa</Badge></Card>
+        <Card className="p-5"><Navigation size={20} className="text-sky-600" /><h3 className="mt-2 font-semibold text-slate-900 dark:text-white">Rastreamento GPS</h3><p className="mt-2 text-sm text-slate-500">Painel móvel ativo: recebe localização, chegada à loja, saída, chegada ao destino e confirmação da entrega.</p><Badge tone="green">Disponível</Badge></Card>
       </div>
       <Card className="overflow-hidden"><div className="border-b border-slate-100 p-5 dark:border-slate-700"><div className="flex items-center gap-2"><Code2 size={18} className="text-[#7A1420] dark:text-red-300" /><h3 className="font-semibold text-slate-900 dark:text-white">Contrato de entrada do Sischef</h3></div><p className="mt-1 text-xs text-slate-400">Esses campos alimentarão automaticamente a mesma fila usada pela entrada manual</p></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-3 font-medium">Campo Imperial</th><th className="px-4 py-3 font-medium">Informação esperada</th><th className="px-4 py-3 font-medium">Obrigatório</th></tr></thead><tbody>{contratoPedidoSischef.map(item => <tr key={item.imperial} className="border-b border-slate-50 dark:border-slate-700/50"><td className="px-4 py-3 font-mono text-xs text-[#7A1420] dark:text-red-300">{item.imperial}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.descricao}</td><td className="px-4 py-3"><Badge tone={item.obrigatorio ? "amber" : "slate"}>{item.obrigatorio ? "Sim" : "Opcional"}</Badge></td></tr>)}</tbody></table></div><div className="border-t border-slate-100 bg-slate-50 p-4 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/30"><ArrowRight size={13} className="mr-1 inline" />Quando a API for liberada, criaremos um webhook autenticado e idempotente; nenhuma tela operacional precisará ser refeita.</div></Card>
     </div>}

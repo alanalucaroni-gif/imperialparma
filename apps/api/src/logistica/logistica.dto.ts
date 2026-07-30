@@ -11,6 +11,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Max,
   Min,
   MinLength,
   ValidateNested,
@@ -222,6 +223,48 @@ export class AtualizarStatusPedidoLogisticaDto {
   @IsOptional()
   @IsString()
   ocorrencia?: string | null;
+}
+
+export class RegistrarLocalizacaoLogisticaDto {
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  precisaoMetros?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  velocidadeKmh?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(360)
+  direcaoGraus?: number;
+}
+
+export class AtualizarEtapaEntregadorDto {
+  @IsEnum(LogisticaPedidoStatus)
+  status!: LogisticaPedidoStatus;
+
+  @IsOptional()
+  @IsString()
+  descricao?: string;
 }
 
 export class SalvarConfiguracaoLogisticaDto {

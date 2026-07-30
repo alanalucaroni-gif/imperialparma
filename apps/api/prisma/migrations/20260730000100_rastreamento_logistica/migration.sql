@@ -1,0 +1,6 @@
+ALTER TYPE "LogisticaPedidoStatus" ADD VALUE IF NOT EXISTS 'NA_LOJA' AFTER 'COLETA';
+ALTER TYPE "LogisticaPedidoStatus" ADD VALUE IF NOT EXISTS 'NO_DESTINO' AFTER 'EM_ROTA';
+
+ALTER TABLE "LogisticaPedido"
+  ADD COLUMN "chegouLojaEm" TIMESTAMP(3),
+  ADD COLUMN "chegouDestinoEm" TIMESTAMP(3);

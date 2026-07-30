@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ImperialERP from "./ImperialERP.jsx";
 import CotacaoFornecedorPublica from "./CotacaoFornecedorPublica.jsx";
+import PainelEntregador from "./PainelEntregador.jsx";
+import RastreioEntrega from "./RastreioEntrega.jsx";
 import { api } from "./api";
 import "./styles.css";
 
@@ -103,9 +105,19 @@ function AuthGate() {
 }
 
 const cotacaoPublica = window.location.pathname.match(/^\/cotacao\/([^/]+)\/?$/);
+const painelEntregador = window.location.pathname.match(/^\/entregador\/([^/]+)\/?$/);
+const rastreioEntrega = window.location.pathname.match(/^\/rastreio\/([^/]+)\/?$/);
+
+const paginaPublica = cotacaoPublica
+  ? <CotacaoFornecedorPublica token={decodeURIComponent(cotacaoPublica[1])} />
+  : painelEntregador
+    ? <PainelEntregador token={decodeURIComponent(painelEntregador[1])} />
+    : rastreioEntrega
+      ? <RastreioEntrega token={decodeURIComponent(rastreioEntrega[1])} />
+      : <AuthGate />;
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    {cotacaoPublica ? <CotacaoFornecedorPublica token={decodeURIComponent(cotacaoPublica[1])} /> : <AuthGate />}
+    {paginaPublica}
   </React.StrictMode>,
 );
