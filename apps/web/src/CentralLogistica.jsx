@@ -138,6 +138,25 @@ function mensagemErro(error, fallback = "Não foi possível concluir a operaçã
   return error?.message || fallback;
 }
 
+function textoLegado(valor, minimo, fallback) {
+  const normalizado = String(valor ?? "").trim();
+  return normalizado.length >= minimo ? normalizado : fallback;
+}
+
+function dataLegada(valor) {
+  if (!valor) return undefined;
+  const convertida = new Date(valor);
+  return Number.isNaN(convertida.getTime()) ? undefined : convertida.toISOString();
+}
+
+function entregadorLegado(pedido) {
+  if (!pedido?.entregador) return undefined;
+  const nome = textoLegado(pedido.entregador.nome, 2, "");
+  const empresa = textoLegado(pedido.entregador.empresa || pedido.entregador.tipo, 2, "");
+  if (!nome || !empresa) return undefined;
+  return { id: pedido.entregador.id, nome, empresa, telefone: pedido.entregador.telefone || undefined };
+}
+
 function pedidoParaCriacaoApi(pedido) {
   return {
     idExterno: pedido.idExterno || undefined,
@@ -171,32 +190,35 @@ function pedidoParaCriacaoApi(pedido) {
 }
 
 function pedidoParaImportacaoApi(pedido) {
+  const bairro = textoLegado(pedido.bairro, 2, "Bairro não informado");
+  const normalizado = {
+    ...pedido,
+    clienteNome: textoLegado(pedido.clienteNome, 2, "Cliente não informado"),
+    endereco: textoLegado(pedido.endereco, 3, `Endereço não informado · ${bairro}`),
+    bairro,
+    enderecoOrigem: textoLegado(pedido.enderecoOrigem, 5, configuracaoInicial.enderecoOrigem),
+  };
   return {
-    ...pedidoParaCriacaoApi(pedido),
-    idLegado: pedido.id,
+    ...pedidoParaCriacaoApi(normalizado),
+    idLegado: textoLegado(pedido.id, 3, `LEG-${String(pedido.id || Date.now())}`),
     status: statusLogisticaValidos.has(pedido.status) ? pedido.status : "AGUARDANDO",
-    entregador: pedido.entregador ? {
-      id: pedido.entregador.id,
-      nome: pedido.entregador.nome,
-      empresa: pedido.entregador.empresa || pedido.entregador.tipo || "Frota Imperial",
-      telefone: pedido.entregador.telefone || undefined,
-    } : undefined,
+    entregador: entregadorLegado(pedido),
     historico: (pedido.historico || [])
       .filter(item => statusLogisticaValidos.has(item.status))
       .map(item => ({
         status: item.status,
         descricao: item.descricao || undefined,
-        em: item.em || undefined,
+        em: dataLegada(item.em),
         dados: item.dados || undefined,
       })),
     ocorrencia: pedido.ocorrencia || undefined,
-    criadoEm: pedido.criadoEm || undefined,
-    atualizadoEm: pedido.atualizadoEm || undefined,
-    atribuidoEm: pedido.atribuidoEm || undefined,
-    coletadoEm: pedido.coletadoEm || undefined,
-    saiuEntregaEm: pedido.saiuEntregaEm || undefined,
-    entregueEm: pedido.entregueEm || undefined,
-    canceladoEm: pedido.canceladoEm || undefined,
+    criadoEm: dataLegada(pedido.criadoEm),
+    atualizadoEm: dataLegada(pedido.atualizadoEm),
+    atribuidoEm: dataLegada(pedido.atribuidoEm),
+    coletadoEm: dataLegada(pedido.coletadoEm),
+    saiuEntregaEm: dataLegada(pedido.saiuEntregaEm),
+    entregueEm: dataLegada(pedido.entregueEm),
+    canceladoEm: dataLegada(pedido.canceladoEm),
   };
 }
 
@@ -246,9 +268,6 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
         const configuracaoJaMigrada = localStorage.getItem("imperial.logisticsSettingsMigrated.v1") === "ok";
         const pedidosValidos = pedidosLegados.filter(pedido =>
           pedido?.id
-          && pedido?.clienteNome?.trim()
-          && pedido?.endereco?.trim()
-          && pedido?.bairro?.trim()
           && numero(pedido?.distanciaKm) > 0
         );
         const payloadImportacao = {
