@@ -5,7 +5,6 @@ import { CotacoesModule } from "./cotacoes/cotacoes.module.js";
 import { EstoqueModule } from "./estoque/estoque.module.js";
 import { FinanceiroModule } from "./financeiro/financeiro.module.js";
 import { IntegracoesModule } from "./integracoes/integracoes.module.js";
-import { IfoodWebhookController } from "./integracoes/ifood-webhook.controller.js";
 import { LogisticaModule } from "./logistica/logistica.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { FornecedoresModule } from "./fornecedores/fornecedores.module.js";
@@ -21,6 +20,6 @@ class HealthController {
 
 @Module({
   imports: [PrismaModule, AuthModule, EstoqueModule, ComprasModule, CotacoesModule, FinanceiroModule, IntegracoesModule, LogisticaModule, FornecedoresModule, FuncionariosModule, UsuariosModule, ReceitasModule],
-  controllers: [HealthController, IfoodWebhookController],
+  controllers: [HealthController],
 })
 export class AppModule {}
