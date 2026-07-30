@@ -465,6 +465,7 @@ model ProducaoReceita {
 model Pedido {
   id             String       @id @default(cuid())
   codigo         String       @unique
+  idExterno      String?      @unique
   clienteNome    String
   endereco       String?
   formaPagamento String
