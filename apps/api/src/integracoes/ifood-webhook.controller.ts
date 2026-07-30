@@ -1,6 +1,7 @@
 import { Controller, HttpCode, Post, RawBodyRequest, Req, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import type { Request } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { IfoodPedidosService } from "./ifood-pedidos.service.js";
 
 function assinaturaValida(rawBody: Buffer, assinatura: string, segredo: string): boolean {
   if (!/^[a-f\d]{64}$/i.test(assinatura)) return false;
@@ -13,9 +14,11 @@ function assinaturaValida(rawBody: Buffer, assinatura: string, segredo: string):
 
 @Controller("webhooks/ifood")
 export class IfoodWebhookController {
+  constructor(private readonly pedidos: IfoodPedidosService) {}
+
   @Post()
   @HttpCode(202)
-  receber(@Req() request: RawBodyRequest<Request>) {
+  async receber(@Req() request: RawBodyRequest<Request>) {
     const segredo = process.env.IFOOD_WEBHOOK_CLIENT_SECRET;
     if (!segredo) {
       throw new ServiceUnavailableException("Webhook do iFood não configurado");
@@ -28,6 +31,8 @@ export class IfoodWebhookController {
       throw new UnauthorizedException("Assinatura do iFood inválida");
     }
 
+    const payload = JSON.parse(request.rawBody.toString("utf8")) as Record<string, unknown>;
+    await this.pedidos.registrarEvento(payload);
     return { recebido: true };
   }
 }

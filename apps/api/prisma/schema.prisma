@@ -114,6 +114,7 @@ enum EntradaOrigem {
   PEDIDO_COMPRA
   AJUSTE
   PRODUCAO
+  VENDA
 }
 
 enum LogisticaPedidoStatus {
@@ -464,6 +465,7 @@ model ProducaoReceita {
 model Pedido {
   id             String       @id @default(cuid())
   codigo         String       @unique
+  idExterno      String?      @unique
   clienteNome    String
   endereco       String?
   formaPagamento String
@@ -775,6 +777,23 @@ model CredencialIntegracao {
   verificadoEm   DateTime?
   criadoEm       DateTime  @default(now())
   atualizadoEm   DateTime  @updatedAt
+}
+
+model IfoodEvento {
+  id               String   @id
+  codigo           String
+  pedidoIdExterno  String
+  payload          Json
+  status           String   @default("PENDENTE")
+  tentativas       Int      @default(0)
+  erro             String?
+  processadoEm     DateTime?
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+
+  @@index([status, criadoEm])
+  @@index([pedidoIdExterno])
+  @@map("ifood_eventos")
 }
 
 model WebhookWhatsapp {
