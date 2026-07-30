@@ -182,6 +182,30 @@ class ImperialApi {
   calcularDistanciaLogistica(body: { origem: string; destino: string; modo?: "TWO_WHEELER" | "DRIVE" }) {
     return this.request<any>("/logistica/calcular-distancia", { method: "POST", body: JSON.stringify(body) });
   }
+  getPedidosLogistica(params?: Record<string, string | number | boolean | undefined>) {
+    return this.request<any>("/logistica/pedidos" + this.query(params));
+  }
+  getPedidoLogistica(id: string) {
+    return this.request<any>(`/logistica/pedidos/${id}`);
+  }
+  cadastrarPedidoLogistica(body: any) {
+    return this.request<any>("/logistica/pedidos", { method: "POST", body: JSON.stringify(body) });
+  }
+  atualizarStatusPedidoLogistica(id: string, body: any) {
+    return this.request<any>(`/logistica/pedidos/${id}/status`, { method: "PATCH", body: JSON.stringify(body) });
+  }
+  registrarOcorrenciaLogistica(id: string, body: { tipo?: string; descricao: string }) {
+    return this.request<any>(`/logistica/pedidos/${id}/ocorrencias`, { method: "POST", body: JSON.stringify(body) });
+  }
+  getConfiguracaoLogistica() {
+    return this.request<any>("/logistica/configuracao");
+  }
+  salvarConfiguracaoLogistica(body: any) {
+    return this.request<any>("/logistica/configuracao", { method: "PUT", body: JSON.stringify(body) });
+  }
+  importarLogistica(body: any) {
+    return this.request<any>("/logistica/importar", { method: "POST", body: JSON.stringify(body) });
+  }
   getCredenciaisIntegracao() { return this.request<any>("/integracoes/credenciais"); }
   salvarCredencialIntegracao(plataforma: string, body: { identificador?: string; token: string }) {
     return this.request<any>(`/integracoes/credenciais/${plataforma}`, { method: "PUT", body: JSON.stringify(body) });

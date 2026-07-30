@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -39,10 +39,13 @@ const configuracaoInicial = {
 
 const statusConfig = {
   AGUARDANDO: { label: "Aguardando despacho", tone: "amber" },
+  EM_PREPARO: { label: "Em preparo", tone: "amber" },
+  PRONTO: { label: "Pronto para despacho", tone: "blue" },
   COLETA: { label: "Aguardando coleta", tone: "blue" },
   EM_ROTA: { label: "Em rota", tone: "brand" },
   ENTREGUE: { label: "Entregue", tone: "green" },
   PROBLEMA: { label: "Com problema", tone: "red" },
+  RETORNANDO: { label: "Retornando", tone: "amber" },
   CANCELADO: { label: "Cancelado", tone: "slate" },
 };
 
@@ -111,6 +114,84 @@ function salvar(chave, valor) {
   return valor;
 }
 
+const statusLogisticaValidos = new Set([
+  "AGUARDANDO",
+  "EM_PREPARO",
+  "PRONTO",
+  "COLETA",
+  "EM_ROTA",
+  "ENTREGUE",
+  "PROBLEMA",
+  "CANCELADO",
+  "RETORNANDO",
+]);
+
+function mensagemErro(error, fallback = "Não foi possível concluir a operação.") {
+  return error?.message || fallback;
+}
+
+function pedidoParaCriacaoApi(pedido) {
+  return {
+    idExterno: pedido.idExterno || undefined,
+    codigoPedido: pedido.codigoPedido,
+    clienteNome: pedido.clienteNome,
+    clienteTelefone: pedido.clienteTelefone || undefined,
+    endereco: pedido.endereco,
+    complemento: pedido.complemento || undefined,
+    referencia: pedido.referencia || undefined,
+    bairro: pedido.bairro,
+    canal: pedido.canal,
+    formaPagamento: pedido.formaPagamento,
+    valorPedido: Number(pedido.valorPedido || 0),
+    taxaEntregaCliente: Number(pedido.taxaEntregaCliente || 0),
+    distanciaKm: Number(pedido.distanciaKm || 0),
+    distanciaCobradaKm: pedido.distanciaCobradaKm == null ? null : Number(pedido.distanciaCobradaKm),
+    duracaoEstimadaMinutos: pedido.rotaCalculada?.duracaoMinutos == null
+      ? undefined
+      : Number(pedido.rotaCalculada.duracaoMinutos),
+    enderecoOrigem: pedido.enderecoOrigem,
+    tipoCalculoDistancia: pedido.tipoCalculoDistancia,
+    origemDistancia: pedido.origemDistancia,
+    rotaCalculada: pedido.rotaCalculada || undefined,
+    custoEstimado: Number(pedido.custoEstimado || 0),
+    custoReal: pedido.custoReal == null ? null : Number(pedido.custoReal),
+    origemValor: pedido.origemValor || undefined,
+    tabelaEmpresa: pedido.tabelaEmpresa || undefined,
+    observacoes: pedido.observacoes || undefined,
+    origem: pedido.origem || "MANUAL",
+  };
+}
+
+function pedidoParaImportacaoApi(pedido) {
+  return {
+    ...pedidoParaCriacaoApi(pedido),
+    idLegado: pedido.id,
+    status: statusLogisticaValidos.has(pedido.status) ? pedido.status : "AGUARDANDO",
+    entregador: pedido.entregador ? {
+      id: pedido.entregador.id,
+      nome: pedido.entregador.nome,
+      empresa: pedido.entregador.empresa || pedido.entregador.tipo || "Frota Imperial",
+      telefone: pedido.entregador.telefone || undefined,
+    } : undefined,
+    historico: (pedido.historico || [])
+      .filter(item => statusLogisticaValidos.has(item.status))
+      .map(item => ({
+        status: item.status,
+        descricao: item.descricao || undefined,
+        em: item.em || undefined,
+        dados: item.dados || undefined,
+      })),
+    ocorrencia: pedido.ocorrencia || undefined,
+    criadoEm: pedido.criadoEm || undefined,
+    atualizadoEm: pedido.atualizadoEm || undefined,
+    atribuidoEm: pedido.atribuidoEm || undefined,
+    coletadoEm: pedido.coletadoEm || undefined,
+    saiuEntregaEm: pedido.saiuEntregaEm || undefined,
+    entregueEm: pedido.entregueEm || undefined,
+    canceladoEm: pedido.canceladoEm || undefined,
+  };
+}
+
 const formularioInicial = {
   codigoPedido: "",
   clienteNome: "",
@@ -139,12 +220,78 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
   const [rotaFeedback, setRotaFeedback] = useState(null);
   const [rotaCalculada, setRotaCalculada] = useState(null);
   const [calculandoDistancia, setCalculandoDistancia] = useState(false);
+  const [carregandoDados, setCarregandoDados] = useState(api.enabled);
   const requisicaoRota = useRef(0);
+
+  useEffect(() => {
+    if (!api.enabled) return undefined;
+    let montado = true;
+
+    async function carregarPersistencia() {
+      setCarregandoDados(true);
+      try {
+        const pedidosLegados = carregar("imperial.logisticsOrders.v1", []);
+        const configuracaoSalva = localStorage.getItem("imperial.logisticsSettings.v1");
+        const configuracaoJaMigrada = localStorage.getItem("imperial.logisticsSettingsMigrated.v1") === "ok";
+        const pedidosValidos = pedidosLegados.filter(pedido =>
+          pedido?.id
+          && pedido?.clienteNome?.trim()
+          && pedido?.endereco?.trim()
+          && pedido?.bairro?.trim()
+          && numero(pedido?.distanciaKm) > 0
+        );
+        const payloadImportacao = {
+          pedidos: pedidosValidos.map(pedidoParaImportacaoApi),
+          ...(configuracaoSalva && !configuracaoJaMigrada ? {
+            configuracao: {
+              enderecoOrigem: configuracao.enderecoOrigem,
+              tipoCalculoDistancia: configuracao.tipoCalculoDistancia,
+              valorKm: numero(configuracao.valorKm),
+              valorMinimo: numero(configuracao.valorMinimo),
+              raioMaximoKm: numero(configuracao.raioMaximoKm),
+            },
+          } : {}),
+        };
+
+        let resultadoImportacao = null;
+        if (payloadImportacao.pedidos.length || payloadImportacao.configuracao) {
+          resultadoImportacao = await api.importarLogistica(payloadImportacao);
+          if (payloadImportacao.configuracao) {
+            localStorage.setItem("imperial.logisticsSettingsMigrated.v1", "ok");
+          }
+        }
+        const [lista, configuracaoPersistida] = await Promise.all([
+          api.getPedidosLogistica({ limit: 200 }),
+          api.getConfiguracaoLogistica(),
+        ]);
+        if (!montado) return;
+        setPedidos(lista.data || []);
+        setConfiguracao(configuracaoPersistida);
+        if (resultadoImportacao?.importados) {
+          setFeedback({
+            tone: "green",
+            text: `${resultadoImportacao.importados} pedido(s) anterior(es) foram preservados no banco de dados.`,
+          });
+        }
+      } catch (error) {
+        if (!montado) return;
+        setFeedback({
+          tone: "red",
+          text: `${mensagemErro(error, "Não foi possível carregar a logística do banco.")} Os dados locais foram mantidos.`,
+        });
+      } finally {
+        if (montado) setCarregandoDados(false);
+      }
+    }
+
+    carregarPersistencia();
+    return () => { montado = false; };
+  }, []);
 
   const ativos = entregadores.filter(item => item.ativo);
   const bairros = useMemo(() => [...new Set(tarifas.map(item => item.bairro).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "pt-BR")), [tarifas]);
-  const ocupados = new Set(pedidos.filter(item => ["COLETA", "EM_ROTA", "PROBLEMA"].includes(item.status)).map(item => item.entregador?.id).filter(Boolean));
+  const ocupados = new Set(pedidos.filter(item => ["COLETA", "EM_ROTA", "PROBLEMA", "RETORNANDO"].includes(item.status)).map(item => item.entregador?.id).filter(Boolean));
   const disponiveis = ativos.filter(item => !ocupados.has(item.id));
 
   const pedidosFiltrados = useMemo(() => {
@@ -155,19 +302,23 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
   }, [pedidos, busca]);
 
   const grupos = {
-    AGUARDANDO: pedidosFiltrados.filter(item => item.status === "AGUARDANDO"),
+    AGUARDANDO: pedidosFiltrados.filter(item => ["AGUARDANDO", "EM_PREPARO", "PRONTO"].includes(item.status)),
     COLETA: pedidosFiltrados.filter(item => item.status === "COLETA"),
-    EM_ROTA: pedidosFiltrados.filter(item => ["EM_ROTA", "PROBLEMA"].includes(item.status)),
+    EM_ROTA: pedidosFiltrados.filter(item => ["EM_ROTA", "PROBLEMA", "RETORNANDO"].includes(item.status)),
     ENTREGUE: pedidosFiltrados.filter(item => ["ENTREGUE", "CANCELADO"].includes(item.status)).slice(0, 20),
   };
 
   const entreguesHoje = pedidos.filter(item => item.status === "ENTREGUE" && hoje(item.entregueEm));
   const gastoHoje = entreguesHoje.reduce((total, item) => total + Number(item.custoReal ?? item.custoEstimado ?? 0), 0);
-  const emOperacao = pedidos.filter(item => ["COLETA", "EM_ROTA", "PROBLEMA"].includes(item.status));
+  const emOperacao = pedidos.filter(item => ["COLETA", "EM_ROTA", "PROBLEMA", "RETORNANDO"].includes(item.status));
   const atrasados = emOperacao.filter(item => Date.now() - new Date(item.atualizadoEm).getTime() > 45 * 60 * 1000);
 
-  function atualizarPedidos(transformar) {
+  function atualizarPedidosLocal(transformar) {
     setPedidos(atuais => salvar("imperial.logisticsOrders.v1", transformar(atuais)));
+  }
+
+  function aplicarPedidoAtualizado(pedido) {
+    setPedidos(atuais => [pedido, ...atuais.filter(item => item.id !== pedido.id)]);
   }
 
   function distanciaCobrada(distancia) {
@@ -231,7 +382,7 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     return `${entregador.nome} · ${entregador.tipo} · por km`;
   }
 
-  function salvarConfiguracao(evento) {
+  async function salvarConfiguracao(evento) {
     evento.preventDefault();
     const proxima = {
       enderecoOrigem: configuracao.enderecoOrigem.trim(),
@@ -240,11 +391,23 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
       valorMinimo: numero(configuracao.valorMinimo),
       raioMaximoKm: numero(configuracao.raioMaximoKm),
     };
-    setConfiguracao(salvar("imperial.logisticsSettings.v1", proxima));
-    setFeedback({ tone: "green", text: "Parâmetros da logística própria foram salvos." });
+    try {
+      if (api.enabled) {
+        setConfiguracao(await api.salvarConfiguracaoLogistica(proxima));
+        localStorage.setItem("imperial.logisticsSettingsMigrated.v1", "ok");
+      } else {
+        setConfiguracao(salvar("imperial.logisticsSettings.v1", proxima));
+      }
+      setFeedback({
+        tone: "green",
+        text: `Parâmetros da logística própria foram salvos ${api.enabled ? "no banco" : "neste navegador"}.`,
+      });
+    } catch (error) {
+      setFeedback({ tone: "red", text: mensagemErro(error, "Não foi possível salvar os parâmetros da logística.") });
+    }
   }
 
-  function cadastrarPedido(evento) {
+  async function cadastrarPedido(evento) {
     evento.preventDefault();
     if (!form.clienteNome.trim() || !form.endereco.trim() || !form.bairro.trim()) {
       setFeedback({ tone: "red", text: "Informe cliente, endereço e bairro." });
@@ -256,9 +419,10 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
       return;
     }
     const agora = dataHora();
+    const idLocal = `LOG-${Date.now()}`;
     const novo = {
-      id: `LOG-${Date.now()}`,
-      idExterno: null,
+      id: idLocal,
+      idExterno: idLocal,
       codigoPedido: form.codigoPedido.trim() || `MAN-${String(pedidos.length + 1).padStart(4, "0")}`,
       clienteNome: form.clienteNome.trim(),
       clienteTelefone: form.clienteTelefone.trim(),
@@ -284,25 +448,61 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
       atualizadoEm: agora,
       historico: [{ status: "AGUARDANDO", em: agora, descricao: "Pedido criado manualmente." }],
     };
-    atualizarPedidos(atuais => [novo, ...atuais]);
-    setForm(formularioInicial);
-    setRotaCalculada(null);
-    setRotaFeedback(null);
-    setAba("painel");
-    setFeedback({ tone: "green", text: `${novo.codigoPedido} entrou na fila de despacho.` });
+    try {
+      const persistido = api.enabled
+        ? await api.cadastrarPedidoLogistica(pedidoParaCriacaoApi(novo))
+        : novo;
+      if (api.enabled) aplicarPedidoAtualizado(persistido);
+      else atualizarPedidosLocal(atuais => [novo, ...atuais]);
+      setForm(formularioInicial);
+      setRotaCalculada(null);
+      setRotaFeedback(null);
+      setAba("painel");
+      setFeedback({
+        tone: "green",
+        text: `${persistido.codigoPedido} entrou na fila e foi salvo ${api.enabled ? "no banco" : "neste navegador"}.`,
+      });
+    } catch (error) {
+      atualizarPedidosLocal(atuais => [novo, ...atuais.filter(item => item.id !== novo.id)]);
+      setFeedback({
+        tone: "red",
+        text: `${mensagemErro(error, "Não foi possível salvar o pedido na API.")} O preenchimento foi preservado localmente para nova tentativa.`,
+      });
+    }
   }
 
-  function alterarStatus(id, status, descricao, extras = {}) {
-    atualizarPedidos(atuais => atuais.map(item => item.id === id ? {
-      ...item,
-      ...extras,
-      status,
-      atualizadoEm: dataHora(),
-      historico: [...(item.historico || []), { status, em: dataHora(), descricao }],
-    } : item));
+  async function alterarStatus(id, status, descricao, extras = {}) {
+    if (!api.enabled) {
+      atualizarPedidosLocal(atuais => atuais.map(item => item.id === id ? {
+        ...item,
+        ...extras,
+        status,
+        atualizadoEm: dataHora(),
+        historico: [...(item.historico || []), { status, em: dataHora(), descricao }],
+      } : item));
+      return true;
+    }
+    try {
+      const atualizado = await api.atualizarStatusPedidoLogistica(id, {
+        status,
+        descricao,
+        ...("entregador" in extras ? { entregador: extras.entregador } : {}),
+        ...("custoEstimado" in extras ? { custoEstimado: extras.custoEstimado } : {}),
+        ...("custoReal" in extras ? { custoReal: extras.custoReal } : {}),
+        ...("origemValor" in extras ? { origemValor: extras.origemValor } : {}),
+        ...("tabelaEmpresa" in extras ? { tabelaEmpresa: extras.tabelaEmpresa } : {}),
+        ...("distanciaCobradaKm" in extras ? { distanciaCobradaKm: extras.distanciaCobradaKm } : {}),
+        ...("ocorrencia" in extras ? { ocorrencia: extras.ocorrencia } : {}),
+      });
+      aplicarPedidoAtualizado(atualizado);
+      return true;
+    } catch (error) {
+      setFeedback({ tone: "red", text: mensagemErro(error, "Não foi possível atualizar a etapa da entrega.") });
+      return false;
+    }
   }
 
-  function despachar(pedido) {
+  async function despachar(pedido) {
     const entregadorId = atribuicoes[pedido.id];
     const entregador = ativos.find(item => item.id === entregadorId);
     if (!entregador) {
@@ -317,7 +517,7 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     const descricaoCusto = custo.origemValor === "tabela"
       ? `preço de tabela ${entregador.tipo}`
       : "cálculo por quilômetro";
-    alterarStatus(pedido.id, "COLETA", `Pedido atribuído a ${entregador.nome} com ${descricaoCusto}.`, {
+    const atualizado = await alterarStatus(pedido.id, "COLETA", `Pedido atribuído a ${entregador.nome} com ${descricaoCusto}.`, {
       entregador: { id: entregador.id, nome: entregador.nome, empresa: entregador.tipo },
       atribuidoEm: dataHora(),
       custoEstimado: custo.valor,
@@ -325,15 +525,17 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
       tabelaEmpresa: custo.empresaTabela,
       distanciaCobradaKm: custo.origemValor === "tabela" ? null : pedido.distanciaCobradaKm,
     });
-    setFeedback({ tone: "green", text: `${pedido.codigoPedido} atribuído a ${entregador.nome} por ${dinheiro(custo.valor)} (${descricaoCusto}).` });
+    if (atualizado) {
+      setFeedback({ tone: "green", text: `${pedido.codigoPedido} atribuído a ${entregador.nome} por ${dinheiro(custo.valor)} (${descricaoCusto}).` });
+    }
   }
 
-  function confirmarColeta(pedido) {
-    alterarStatus(pedido.id, "EM_ROTA", "Pedido coletado e saiu para entrega.", { coletadoEm: dataHora(), saiuEntregaEm: dataHora() });
-    setFeedback({ tone: "green", text: `${pedido.codigoPedido} saiu para entrega.` });
+  async function confirmarColeta(pedido) {
+    const atualizado = await alterarStatus(pedido.id, "EM_ROTA", "Pedido coletado e saiu para entrega.", { coletadoEm: dataHora(), saiuEntregaEm: dataHora() });
+    if (atualizado) setFeedback({ tone: "green", text: `${pedido.codigoPedido} saiu para entrega.` });
   }
 
-  function concluirEntrega(pedido) {
+  async function concluirEntrega(pedido) {
     const resultado = onConcluirEntrega({
       pedido,
       entregador: {
@@ -347,21 +549,23 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
       setFeedback(resultado);
       return;
     }
-    alterarStatus(pedido.id, "ENTREGUE", "Entrega concluída.", { entregueEm: dataHora(), custoReal: Number(pedido.custoEstimado || 0) });
-    setFeedback(resultado);
+    const atualizado = await alterarStatus(pedido.id, "ENTREGUE", "Entrega concluída.", { entregueEm: dataHora(), custoReal: Number(pedido.custoEstimado || 0) });
+    if (atualizado) setFeedback(resultado);
   }
 
-  function registrarProblema(pedido) {
+  async function registrarProblema(pedido) {
     const descricao = window.prompt("Descreva o problema da entrega:");
     if (!descricao?.trim()) return;
-    alterarStatus(pedido.id, "PROBLEMA", descricao.trim(), { ocorrencia: descricao.trim() });
-    setFeedback({ tone: "amber", text: `Ocorrência registrada no ${pedido.codigoPedido}.` });
+    const atualizado = await alterarStatus(pedido.id, "PROBLEMA", descricao.trim(), { ocorrencia: descricao.trim() });
+    if (atualizado) setFeedback({ tone: "amber", text: `Ocorrência registrada no ${pedido.codigoPedido}.` });
   }
 
-  function cancelarPedido(pedido) {
+  async function cancelarPedido(pedido) {
     if (!window.confirm(`Cancelar o pedido logístico ${pedido.codigoPedido}?`)) return;
-    alterarStatus(pedido.id, "CANCELADO", "Pedido logístico cancelado.", { canceladoEm: dataHora() });
-    setFeedback({ tone: "amber", text: `${pedido.codigoPedido} foi cancelado sem gerar custo de entrega.` });
+    const atualizado = await alterarStatus(pedido.id, "CANCELADO", "Pedido logístico cancelado.", { canceladoEm: dataHora() });
+    if (atualizado) {
+      setFeedback({ tone: "amber", text: `${pedido.codigoPedido} foi cancelado sem gerar custo de entrega.` });
+    }
   }
 
   function PedidoCard({ pedido }) {
@@ -379,15 +583,16 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
         {pedido.ocorrencia && <div className="rounded-lg bg-rose-50 p-2 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"><AlertTriangle size={12} className="mr-1 inline" />{pedido.ocorrencia}</div>}
       </div>
 
-      {pedido.status === "AGUARDANDO" && <div className="mt-3 flex gap-2"><select value={atribuicoes[pedido.id] || ""} onChange={evento => setAtribuicoes(atual => ({ ...atual, [pedido.id]: evento.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"><option value="">Selecionar entregador</option>{ativos.map(item => <option key={item.id} value={item.id} disabled={ocupados.has(item.id)}>{rotuloEntregador(item, pedido)}{ocupados.has(item.id) ? " · ocupado" : ""}</option>)}</select><button type="button" onClick={() => despachar(pedido)} className="rounded-lg bg-[#7A1420] px-3 py-2 text-xs font-medium text-white">Despachar</button></div>}
+      {pedido.status === "EM_PREPARO" && <button type="button" onClick={async () => { const ok = await alterarStatus(pedido.id, "PRONTO", "Pedido pronto para retirada."); if (ok) setFeedback({ tone: "green", text: `${pedido.codigoPedido} está pronto para despacho.` }); }} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Marcar como pronto</button>}
+      {["AGUARDANDO", "PRONTO"].includes(pedido.status) && <div className="mt-3 flex gap-2"><select value={atribuicoes[pedido.id] || ""} onChange={evento => setAtribuicoes(atual => ({ ...atual, [pedido.id]: evento.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"><option value="">Selecionar entregador</option>{ativos.map(item => <option key={item.id} value={item.id} disabled={ocupados.has(item.id)}>{rotuloEntregador(item, pedido)}{ocupados.has(item.id) ? " · ocupado" : ""}</option>)}</select><button type="button" onClick={() => despachar(pedido)} className="rounded-lg bg-[#7A1420] px-3 py-2 text-xs font-medium text-white">Despachar</button></div>}
       {pedido.status === "COLETA" && <div className="mt-3 flex gap-2"><button type="button" onClick={() => confirmarColeta(pedido)} className={cx(primaryButton, "flex-1 py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Confirmar coleta</button><button type="button" onClick={() => cancelarPedido(pedido)} className="rounded-lg border border-rose-200 px-3 text-xs text-rose-600"><XCircle size={14} /></button></div>}
       {pedido.status === "EM_ROTA" && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => concluirEntrega(pedido)} className={cx(primaryButton, "py-2 text-xs")}><CheckCircle2 size={13} className="mr-1 inline" />Concluir</button><button type="button" onClick={() => registrarProblema(pedido)} className="rounded-lg border border-amber-200 px-3 py-2 text-xs text-amber-700"><AlertTriangle size={13} className="mr-1 inline" />Problema</button></div>}
-      {pedido.status === "PROBLEMA" && <button type="button" onClick={() => alterarStatus(pedido.id, "EM_ROTA", "Entrega retomada após ocorrência.", { ocorrencia: null })} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><RefreshCw size={13} className="mr-1 inline" />Retomar entrega</button>}
+      {pedido.status === "PROBLEMA" && <button type="button" onClick={async () => { const ok = await alterarStatus(pedido.id, "EM_ROTA", "Entrega retomada após ocorrência.", { ocorrencia: null }); if (ok) setFeedback({ tone: "green", text: `${pedido.codigoPedido} retomou a rota.` }); }} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><RefreshCw size={13} className="mr-1 inline" />Retomar entrega</button>}
     </div>;
   }
 
   const colunas = [
-    { chave: "AGUARDANDO", titulo: "Aguardando despacho", icon: Clock3 },
+    { chave: "AGUARDANDO", titulo: "Preparo / despacho", icon: Clock3 },
     { chave: "COLETA", titulo: "Coleta", icon: PackageCheck },
     { chave: "EM_ROTA", titulo: "Em rota", icon: Navigation },
     { chave: "ENTREGUE", titulo: "Finalizados", icon: CheckCircle2 },
@@ -396,13 +601,14 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
   return <div className="flex flex-col gap-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><h3 className="text-base font-semibold text-slate-900 dark:text-white">Central de Logística Imperial</h3><p className="text-sm text-slate-500 dark:text-slate-400">Operação própria preparada para receber pedidos do Sischef</p></div>
-      <div className="flex gap-2"><Badge tone="amber">Sischef aguardando API</Badge><button type="button" onClick={() => setAba("novo")} className={primaryButton}><Plus size={15} className="mr-1 inline" />Novo pedido</button></div>
+      <div className="flex flex-wrap gap-2">{api.enabled && <Badge tone="green">Dados protegidos no banco</Badge>}<Badge tone="amber">Sischef aguardando API</Badge><button type="button" onClick={() => setAba("novo")} className={primaryButton}><Plus size={15} className="mr-1 inline" />Novo pedido</button></div>
     </div>
 
     <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-700">
       {[["painel", "Painel de despacho"], ["novo", "Entrada manual"], ["integracao", "Preparação Sischef"]].map(([chave, label]) => <button key={chave} onClick={() => setAba(chave)} className={cx("whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium", aba === chave ? "border-[#7A1420] text-[#7A1420] dark:text-red-300" : "border-transparent text-slate-400")}>{label}</button>)}
     </div>
 
+    {carregandoDados && <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300">Sincronizando pedidos, etapas e configurações com o banco de dados...</div>}
     {feedback && <div className={cx("rounded-xl border px-4 py-3 text-sm", feedback.tone === "green" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300" : feedback.tone === "red" ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300" : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300")}>{feedback.text}</div>}
 
     {aba === "painel" && <>
