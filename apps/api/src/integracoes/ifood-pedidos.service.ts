@@ -239,7 +239,9 @@ export class IfoodPedidosService {
     if (!itens.length) throw new Error("O pedido confirmado não possui itens para registrar.");
 
     await this.prisma.$transaction(async (tx) => {
-      const existente = await tx.pedido.findUnique({ where: { codigo } });
+      const existente = await tx.pedido.findFirst({
+        where: { OR: [{ idExterno: pedidoIfood.id }, { codigo }] },
+      });
       if (existente) return;
 
       const receitas = [];
@@ -271,6 +273,7 @@ export class IfoodPedidosService {
       const pedido = await tx.pedido.create({
         data: {
           codigo,
+          idExterno: pedidoIfood.id,
           clienteNome: texto(pedidoIfood.customer?.name) || "Cliente iFood",
           endereco: this.enderecoPedido(pedidoIfood)?.completo || null,
           formaPagamento: texto(pedidoIfood.payments?.methods?.[0]?.method)
@@ -377,9 +380,7 @@ export class IfoodPedidosService {
   }
 
   private async sincronizarStatus(orderId: string, codigoEvento: string) {
-    const pedido = await this.prisma.pedido.findFirst({
-      where: { canal: "iFood", OR: [{ codigo: orderId }, { codigo: { contains: orderId } }] },
-    });
+    const pedido = await this.prisma.pedido.findUnique({ where: { idExterno: orderId } });
     const entrega = await this.prisma.logisticaPedido.findFirst({
       where: { canal: "iFood", idExterno: orderId },
     });
