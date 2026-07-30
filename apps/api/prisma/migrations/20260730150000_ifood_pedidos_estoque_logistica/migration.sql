@@ -1,5 +1,8 @@
 ALTER TYPE "EntradaOrigem" ADD VALUE IF NOT EXISTS 'VENDA';
 
+ALTER TABLE "Pedido" ADD COLUMN "idExterno" TEXT;
+CREATE UNIQUE INDEX "Pedido_idExterno_key" ON "Pedido"("idExterno");
+
 CREATE TABLE "ifood_eventos" (
     "id" TEXT NOT NULL,
     "codigo" TEXT NOT NULL,
