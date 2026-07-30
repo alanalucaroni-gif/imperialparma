@@ -25,6 +25,7 @@ enum MovimentacaoTipo {
   SAIDA
   AJUSTE
   PRODUCAO
+  VENDA
 }
 
 enum ContaStatus {
@@ -775,6 +776,23 @@ model CredencialIntegracao {
   verificadoEm   DateTime?
   criadoEm       DateTime  @default(now())
   atualizadoEm   DateTime  @updatedAt
+}
+
+model IfoodEvento {
+  id               String   @id
+  codigo           String
+  pedidoIdExterno  String
+  payload          Json
+  status           String   @default("PENDENTE")
+  tentativas       Int      @default(0)
+  erro             String?
+  processadoEm     DateTime?
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+
+  @@index([status, criadoEm])
+  @@index([pedidoIdExterno])
+  @@map("ifood_eventos")
 }
 
 model WebhookWhatsapp {
