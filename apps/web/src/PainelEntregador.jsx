@@ -230,6 +230,30 @@ export default function PainelEntregador({ token }) {
         </section>
 
         <section className="rounded-3xl bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Sua rota</p>
+              <h3 className="mt-1 font-semibold text-slate-900">{pedido.rotaPedidos?.length || 1}/4 pedidos</h3>
+            </div>
+            {pedido.valorCorrida == null
+              ? <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">Valor liberado após coleta</span>
+              : <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700">{dinheiro(pedido.valorCorrida)}</span>}
+          </div>
+          <div className="mt-4 space-y-2">
+            {(pedido.rotaPedidos || []).map(item => (
+              <div key={item.id} className={`flex items-center justify-between gap-3 rounded-2xl border p-3 ${item.codigoPedido === pedido.codigoPedido ? "border-red-200 bg-red-50/50" : "border-slate-100"}`}>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase text-slate-400">Parada {item.ordemNaRota}</p>
+                  <p className="truncate text-sm font-semibold text-slate-800">{item.codigoPedido} · {item.bairro}</p>
+                </div>
+                <span className="whitespace-nowrap text-xs font-semibold text-slate-600">{item.valorCorrida == null ? "após coleta" : dinheiro(item.valorCorrida)}</span>
+              </div>
+            ))}
+          </div>
+          {pedido.totalRota > 0 && <div className="mt-4 flex justify-between border-t border-slate-100 pt-3 text-sm"><span className="text-slate-500">Total liberado da rota</span><strong className="text-emerald-700">{dinheiro(pedido.totalRota)}</strong></div>}
+        </section>
+
+        <section className="rounded-3xl bg-white p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between">
             <h3 className="font-semibold text-slate-900">Progresso</h3>
             <span className="text-xs text-slate-400">Atualizado {hora(pedido.atualizadoEm)}</span>

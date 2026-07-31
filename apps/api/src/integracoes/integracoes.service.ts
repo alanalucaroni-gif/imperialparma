@@ -11,6 +11,7 @@ type WhatsappMetadados = {
   graphVersion: string;
   templateName: string;
   pedidoTemplateName: string;
+  logisticaTemplateName: string;
   templateLanguage: string;
 };
 
@@ -156,6 +157,7 @@ export class IntegracoesService {
       graphVersion: process.env.WHATSAPP_GRAPH_VERSION?.trim() || "v24.0",
       templateName: process.env.WHATSAPP_COTACAO_TEMPLATE?.trim() || "cotacao_fornecedor",
       pedidoTemplateName: process.env.WHATSAPP_PEDIDO_TEMPLATE?.trim() || "pedido_compra",
+      logisticaTemplateName: process.env.WHATSAPP_LOGISTICA_TEMPLATE?.trim() || "logistica_rastreio",
       templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "pt_BR",
       verifyToken: process.env.WHATSAPP_VERIFY_TOKEN?.trim() || "",
       appSecret: process.env.WHATSAPP_APP_SECRET?.trim() || "",
@@ -176,6 +178,7 @@ export class IntegracoesService {
           graphVersion: metadados.graphVersion || "v24.0",
           templateName: metadados.templateName || "cotacao_fornecedor",
           pedidoTemplateName: metadados.pedidoTemplateName || "pedido_compra",
+          logisticaTemplateName: metadados.logisticaTemplateName || "logistica_rastreio",
           templateLanguage: metadados.templateLanguage || "pt_BR",
           accessToken: segredos.accessToken,
           verifyToken: segredos.verifyToken || "",
@@ -207,6 +210,7 @@ export class IntegracoesService {
         graphVersion: configuracao.graphVersion,
         templateName: configuracao.templateName,
         pedidoTemplateName: configuracao.pedidoTemplateName,
+        logisticaTemplateName: configuracao.logisticaTemplateName,
         templateLanguage: configuracao.templateLanguage,
         possuiAccessToken: Boolean(configuracao.accessToken),
         possuiVerifyToken: Boolean(configuracao.verifyToken),
@@ -224,6 +228,7 @@ export class IntegracoesService {
       graphVersion: ambiente?.graphVersion || "v24.0",
       templateName: ambiente?.templateName || "cotacao_fornecedor",
       pedidoTemplateName: ambiente?.pedidoTemplateName || "pedido_compra",
+      logisticaTemplateName: ambiente?.logisticaTemplateName || "logistica_rastreio",
       templateLanguage: ambiente?.templateLanguage || "pt_BR",
       possuiAccessToken: Boolean(ambiente?.accessToken),
       possuiVerifyToken: Boolean(ambiente?.verifyToken),
@@ -249,6 +254,7 @@ export class IntegracoesService {
       graphVersion: dto.graphVersion.trim(),
       templateName: dto.templateName.trim(),
       pedidoTemplateName: dto.pedidoTemplateName?.trim() || "pedido_compra",
+      logisticaTemplateName: dto.logisticaTemplateName?.trim() || "logistica_rastreio",
       templateLanguage: dto.templateLanguage.trim(),
     } satisfies WhatsappMetadados);
     const segredo = this.cifrar(JSON.stringify({ accessToken, verifyToken, appSecret } satisfies WhatsappSegredos));

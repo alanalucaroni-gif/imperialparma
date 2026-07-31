@@ -16,7 +16,7 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
-import { LogisticaPedidoStatus } from "../generated/prisma/enums.js";
+import { LogisticaOrdemPagamentoStatus, LogisticaPedidoStatus } from "../generated/prisma/enums.js";
 import { PageDto } from "../common/page.dto.js";
 
 export class CalcularDistanciaDto {
@@ -305,6 +305,31 @@ export class ResolverOcorrenciaLogisticaDto {
   @IsString()
   @MinLength(3)
   resolucao!: string;
+}
+
+export class GerarOrdensPagamentoLogisticaDto {
+  @IsDateString()
+  data!: string;
+}
+
+export class ListarOrdensPagamentoLogisticaDto {
+  @IsOptional()
+  @IsDateString()
+  dataInicio?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dataFim?: string;
+
+  @IsOptional()
+  @IsEnum(LogisticaOrdemPagamentoStatus)
+  status?: LogisticaOrdemPagamentoStatus;
+}
+
+export class PagarOrdemPagamentoLogisticaDto {
+  @IsOptional()
+  @IsString()
+  observacao?: string;
 }
 
 export class ImportarEtapaLogisticaDto {

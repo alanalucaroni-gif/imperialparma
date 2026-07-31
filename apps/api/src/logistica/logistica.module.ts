@@ -4,6 +4,7 @@ import { AuthModule } from "../auth/auth.module.js";
 import { IntegracoesModule } from "../integracoes/integracoes.module.js";
 import { LogisticaController } from "./logistica.controller.js";
 import { LogisticaOperacaoService } from "./logistica-operacao.service.js";
+import { LogisticaPagamentosService } from "./logistica-pagamentos.service.js";
 import {
   LogisticaEntregadorController,
   LogisticaPublicaController,
@@ -18,6 +19,6 @@ import { LogisticaService } from "./logistica.service.js";
     LogisticaEntregadorController,
     LogisticaPublicaController,
   ],
-  providers: [LogisticaService, LogisticaOperacaoService, LogisticaRastreamentoService],
+  providers: [LogisticaService, LogisticaOperacaoService, LogisticaRastreamentoService, LogisticaPagamentosService],
 })
 export class LogisticaModule {}

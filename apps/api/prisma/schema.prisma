@@ -135,6 +135,12 @@ enum LogisticaOcorrenciaStatus {
   ABERTA
   RESOLVIDA
 }
+enum LogisticaOrdemPagamentoStatus {
+  PENDENTE
+  PAGA
+  CANCELADA
+}
+
 
 model Usuario {
   id            String         @id @default(cuid())
@@ -828,6 +834,7 @@ model LogisticaEntregador {
   ativo         Boolean                @default(true)
   pedidos       LogisticaPedido[]
   localizacoes  LogisticaLocalizacao[]
+  ordensPagamento LogisticaOrdemPagamento[]
   criadoEm      DateTime               @default(now())
   atualizadoEm  DateTime               @updatedAt
 
@@ -865,6 +872,12 @@ model LogisticaPedido {
   origem                 String                 @default("MANUAL")
   status                 LogisticaPedidoStatus  @default(AGUARDANDO)
   entregadorId           String?
+  rotaId                 String?
+  ordemNaRota            Int?
+  linkEntregadorEnviadoEm DateTime?
+  linkClienteEnviadoEm    DateTime?
+  falhaEnvioEntregador    String?
+  falhaEnvioCliente       String?
   entregador             LogisticaEntregador?   @relation(fields: [entregadorId], references: [id], onDelete: SetNull)
   atribuidoEm            DateTime?
   chegouLojaEm           DateTime?
@@ -876,6 +889,7 @@ model LogisticaPedido {
   criadoPorUsuarioId     String?
   atualizadoPorUsuarioId String?
   etapas                 LogisticaPedidoEtapa[]
+  ordemPagamentoItem    LogisticaOrdemPagamentoItem?
   ocorrencias            LogisticaOcorrencia[]
   localizacoes           LogisticaLocalizacao[]
   criadoEm               DateTime               @default(now())
@@ -885,6 +899,7 @@ model LogisticaPedido {
   @@index([status, atualizadoEm])
   @@index([codigoPedido])
   @@index([bairro, criadoEm])
+  @@index([rotaId, ordemNaRota])
   @@index([entregadorId, status])
 }
 
@@ -933,4 +948,38 @@ model LogisticaLocalizacao {
 
   @@index([entregadorId, registradoEm])
   @@index([pedidoId, registradoEm])
+}
+
+model LogisticaOrdemPagamento {
+  id                    String                         @id @default(cuid())
+  codigo                String                         @unique
+  entregadorId          String
+  entregador            LogisticaEntregador            @relation(fields: [entregadorId], references: [id], onDelete: Restrict)
+  dataReferencia        DateTime                       @db.Date
+  quantidadeCorridas    Int
+  total                 Decimal                        @db.Decimal(14, 2)
+  totalTaxasCliente     Decimal                        @default(0) @db.Decimal(14, 2)
+  status                LogisticaOrdemPagamentoStatus @default(PENDENTE)
+  geradaPorUsuarioId    String?
+  pagaPorUsuarioId      String?
+  pagaEm                DateTime?
+  itens                 LogisticaOrdemPagamentoItem[]
+  criadoEm              DateTime                       @default(now())
+  atualizadoEm          DateTime                       @updatedAt
+
+  @@unique([entregadorId, dataReferencia])
+  @@index([status, dataReferencia])
+}
+
+model LogisticaOrdemPagamentoItem {
+  id                String                    @id @default(cuid())
+  ordemPagamentoId String
+  ordemPagamento   LogisticaOrdemPagamento   @relation(fields: [ordemPagamentoId], references: [id], onDelete: Cascade)
+  pedidoId          String                    @unique
+  pedido            LogisticaPedido           @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  valorCorrida      Decimal                   @db.Decimal(14, 2)
+  taxaCliente       Decimal                   @default(0) @db.Decimal(14, 2)
+  criadoEm          DateTime                  @default(now())
+
+  @@index([ordemPagamentoId])
 }

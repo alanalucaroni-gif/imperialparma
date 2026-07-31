@@ -44,13 +44,16 @@ function consolidar(corridas) {
       empresa,
       entregador,
       corridas: 0,
-      total: 0,
+      recebidoCliente: 0,
+      pagoMoto: 0,
     };
     atual.corridas += 1;
-    atual.total += Number(corrida.valor || 0);
+    atual.recebidoCliente += Number(corrida.taxaCliente || 0);
+    atual.pagoMoto += Number(corrida.valor || 0);
+    atual.saldo = atual.recebidoCliente - atual.pagoMoto;
     grupos.set(chave, atual);
   });
-  return [...grupos.values()].sort((a, b) => b.total - a.total);
+  return [...grupos.values()].sort((a, b) => b.pagoMoto - a.pagoMoto);
 }
 
 function montarBarras(itens, vazio) {
@@ -86,8 +89,11 @@ export function montarHtmlRelatorioMotos({ corridas = [], filtros = {} }) {
   const empresas = agrupar(corridas, "empresa");
   const entregadores = agrupar(corridas, "entregador");
   const linhas = consolidar(corridas);
-  const total = corridas.reduce((soma, corrida) => soma + Number(corrida.valor || 0), 0);
-  const media = corridas.length ? total / corridas.length : 0;
+  const totalPago = corridas.reduce((soma, corrida) => soma + Number(corrida.valor || 0), 0);
+  const totalRecebido = corridas.reduce((soma, corrida) => soma + Number(corrida.taxaCliente || 0), 0);
+  const saldoTaxas = totalRecebido - totalPago;
+  const total = totalPago;
+  const media = corridas.length ? totalPago / corridas.length : 0;
   const geradoEm = new Date().toLocaleString("pt-BR");
   const filtrosAplicados = descreverFiltros(filtros);
 
@@ -98,10 +104,12 @@ export function montarHtmlRelatorioMotos({ corridas = [], filtros = {} }) {
           <td>${normalizarTexto(item.empresa)}</td>
           <td>${normalizarTexto(item.entregador)}</td>
           <td class="number">${item.corridas}</td>
-          <td class="number strong">${dinheiro(item.total)}</td>
+          <td class="number">${dinheiro(item.recebidoCliente)}</td>
+          <td class="number strong">${dinheiro(item.pagoMoto)}</td>
+          <td class="number strong">${dinheiro(item.saldo)}</td>
         </tr>
       `).join("")
-    : '<tr><td colspan="5" class="empty">Nenhuma corrida encontrada com os filtros selecionados.</td></tr>';
+    : '<tr><td colspan="7" class="empty">Nenhuma corrida encontrada com os filtros selecionados.</td></tr>';
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -142,7 +150,7 @@ export function montarHtmlRelatorioMotos({ corridas = [], filtros = {} }) {
       }
       .kpis {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(6, 1fr);
         gap: 9px;
         margin-top: 11px;
       }
@@ -217,6 +225,8 @@ export function montarHtmlRelatorioMotos({ corridas = [], filtros = {} }) {
     <section class="kpis">
       <div class="kpi"><div class="kpi-label">Total gasto</div><div class="kpi-value">${dinheiro(total)}</div><div class="kpi-detail">Soma das corridas filtradas</div></div>
       <div class="kpi"><div class="kpi-label">Corridas</div><div class="kpi-value">${corridas.length}</div><div class="kpi-detail">Entregas registradas</div></div>
+      <div class="kpi"><div class="kpi-label">Recebido clientes</div><div class="kpi-value">${dinheiro(totalRecebido)}</div><div class="kpi-detail">Taxas de entrega cobradas</div></div>
+      <div class="kpi"><div class="kpi-label">Saldo das taxas</div><div class="kpi-value">${dinheiro(saldoTaxas)}</div><div class="kpi-detail">Recebido menos pago</div></div>
       <div class="kpi"><div class="kpi-label">Custo médio</div><div class="kpi-value">${dinheiro(media)}</div><div class="kpi-detail">Média por corrida</div></div>
       <div class="kpi"><div class="kpi-label">Prestadoras</div><div class="kpi-value">${empresas.length}</div><div class="kpi-detail">Empresas no resultado</div></div>
     </section>
@@ -238,11 +248,11 @@ export function montarHtmlRelatorioMotos({ corridas = [], filtros = {} }) {
       <h2 class="table-title">Consolidado por bairro, empresa e entregador</h2>
       <table>
         <thead>
-          <tr><th>Bairro</th><th>Empresa prestadora</th><th>Entregador</th><th class="number">Corridas</th><th class="number">Total</th></tr>
+          <tr><th>Bairro</th><th>Empresa prestadora</th><th>Entregador</th><th class="number">Corridas</th><th class="number">Recebido cliente</th><th class="number">Pago moto</th><th class="number">Saldo</th></tr>
         </thead>
         <tbody>
           ${linhasTabela}
-          ${linhas.length ? `<tr class="total-row"><td colspan="3">Total filtrado</td><td class="number">${corridas.length}</td><td class="number">${dinheiro(total)}</td></tr>` : ""}
+          ${linhas.length ? `<tr class="total-row"><td colspan="3">Total filtrado</td><td class="number">${corridas.length}</td><td class="number">${dinheiro(totalRecebido)}</td><td class="number">${dinheiro(totalPago)}</td><td class="number">${dinheiro(saldoTaxas)}</td></tr>` : ""}
         </tbody>
       </table>
     </section>

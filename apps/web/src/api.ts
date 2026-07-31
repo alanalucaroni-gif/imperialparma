@@ -199,6 +199,15 @@ class ImperialApi {
   gerarLinksPedidoLogistica(id: string) {
     return this.request<any>(`/logistica/pedidos/${id}/links`, { method: "POST" });
   }
+  getOrdensPagamentoLogistica(params?: Record<string, string | undefined>) {
+    return this.request<any>("/logistica/ordens-pagamento" + this.query(params));
+  }
+  gerarOrdensPagamentoLogistica(data: string) {
+    return this.request<any>("/logistica/ordens-pagamento/gerar", { method: "POST", body: JSON.stringify({ data }) });
+  }
+  pagarOrdemPagamentoLogistica(id: string) {
+    return this.request<any>(`/logistica/ordens-pagamento/${id}/pagar`, { method: "PATCH", body: "{}" });
+  }
   getPainelEntregadorLogistica(token: string) {
     return this.request<any>(`/logistica-entregador/${encodeURIComponent(token)}`);
   }

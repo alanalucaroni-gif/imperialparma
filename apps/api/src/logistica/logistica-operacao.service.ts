@@ -99,6 +99,16 @@ const incluirPedido = {
 };
 
 const texto = (valor?: string | null) => valor?.trim() || null;
+const STATUS_ROTA_ATIVA: LogisticaPedidoStatus[] = [
+  LogisticaPedidoStatus.COLETA,
+  LogisticaPedidoStatus.NA_LOJA,
+  LogisticaPedidoStatus.EM_ROTA,
+  LogisticaPedidoStatus.NO_DESTINO,
+  LogisticaPedidoStatus.PROBLEMA,
+  LogisticaPedidoStatus.RETORNANDO,
+];
+const LIMITE_PEDIDOS_ROTA = 4;
+
 const data = (valor?: string | null) => valor ? new Date(valor) : null;
 const numero = (valor: unknown) => valor == null ? null : Number(valor);
 
@@ -207,11 +217,36 @@ export class LogisticaOperacaoService {
           ? (await this.garantirEntregador(tx, dto.entregador)).id
           : undefined;
       const timestamps = this.timestampsParaStatus(dto.status, agora);
+      let rota: { rotaId: string; ordemNaRota: number } | null = null;
+      if (dto.status === LogisticaPedidoStatus.COLETA && entregadorId) {
+        const pedidosAtivos = await tx.logisticaPedido.findMany({
+          where: {
+            entregadorId,
+            id: { not: id },
+            status: { in: STATUS_ROTA_ATIVA },
+          },
+          select: { rotaId: true, ordemNaRota: true },
+          orderBy: { ordemNaRota: "desc" },
+        });
+        if (pedidosAtivos.length >= LIMITE_PEDIDOS_ROTA) {
+          throw new BadRequestException(
+            `Este entregador já está com ${LIMITE_PEDIDOS_ROTA} pedidos na rota.`,
+          );
+        }
+        const rotaId = pedidosAtivos.find((item: any) => item.rotaId)?.rotaId
+          || `ROTA-${entregadorId}-${Date.now()}`;
+        const maiorOrdem = pedidosAtivos.reduce(
+          (maior: number, item: any) => Math.max(maior, item.ordemNaRota || 0),
+          0,
+        );
+        rota = { rotaId, ordemNaRota: maiorOrdem + 1 };
+      }
       const dados: any = {
         status: dto.status,
         atualizadoPorUsuarioId: usuarioId,
         ...timestamps,
         ...(entregadorId === undefined ? {} : { entregadorId }),
+        ...(rota || {}),
         ...(dto.custoEstimado === undefined ? {} : { custoEstimado: dto.custoEstimado }),
         ...(dto.custoReal === undefined ? {} : { custoReal: dto.custoReal }),
         ...(dto.origemValor === undefined ? {} : { origemValor: texto(dto.origemValor) }),

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import CentralLogistica from "./CentralLogistica.jsx";
 import { abrirRelatorioMotosPdf } from "./relatorioMotosPdf.js";
+import { api } from "./api.ts";
 import { empresaUsaPrecoTabela, valorTabelaEntrega } from "./regraCustoEntrega.js";
 import {
   BarChart3,
@@ -179,6 +180,9 @@ export default function EntregasMotos({
   const [filtroBairro, setFiltroBairro] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroEntregador, setFiltroEntregador] = useState("");
+  const [dataFechamento, setDataFechamento] = useState(() => dataIsoLocal(new Date()));
+  const [ordensPagamento, setOrdensPagamento] = useState([]);
+  const [processandoOrdens, setProcessandoOrdens] = useState(false);
 
   useEffect(() => {
     if (!entregadoresAtivos.some(item => item.id === entregadorId) && !lista.length) {
@@ -193,6 +197,10 @@ export default function EntregasMotos({
       tipo: empresasOrdenadas.includes(atual.tipo) ? atual.tipo : (empresasOrdenadas[0] ?? "Particular"),
     }));
   }, [empresasOrdenadas, empresaAvulsa]);
+
+  useEffect(() => {
+    if (tab === "relatorios" && api.enabled) carregarOrdensPagamento();
+  }, [tab]);
 
   const entregadorCadastrado = entregadores.find(item => item.id === entregadorId);
   const empresaCorrida = modoEntregador === "avulso" ? empresaAvulsa : entregadorCadastrado?.tipo;
@@ -250,16 +258,21 @@ export default function EntregasMotos({
         empresa: corrida.empresa,
         entregador: corrida.entregador,
         corridas: 0,
-        total: 0,
+        recebidoCliente: 0,
+        pagoMoto: 0,
       };
       atual.corridas += 1;
-      atual.total += Number(corrida.valor || 0);
+      atual.recebidoCliente += Number(corrida.taxaCliente || 0);
+      atual.pagoMoto += Number(corrida.valor || 0);
+      atual.saldo = atual.recebidoCliente - atual.pagoMoto;
       grupos.set(chave, atual);
     });
-    return [...grupos.values()].sort((a, b) => b.total - a.total);
+    return [...grupos.values()].sort((a, b) => b.pagoMoto - a.pagoMoto);
   }, [corridasFiltradas]);
 
   const totalRelatorio = corridasFiltradas.reduce((total, item) => total + Number(item.valor || 0), 0);
+  const totalRecebidoCliente = corridasFiltradas.reduce((total, item) => total + Number(item.taxaCliente || 0), 0);
+  const saldoTaxasEntrega = totalRecebidoCliente - totalRelatorio;
   const comparativoEmpresas = useMemo(() => {
     const grupos = new Map();
     corridasFiltradas.forEach(corrida => {
@@ -482,6 +495,42 @@ export default function EntregasMotos({
       },
     });
     setFeedback(resultado);
+  }
+
+  async function carregarOrdensPagamento() {
+    if (!api.enabled) return;
+    try {
+      const resposta = await api.getOrdensPagamentoLogistica({
+        dataInicio: filtroInicio || undefined,
+        dataFim: filtroFim || undefined,
+      });
+      setOrdensPagamento(resposta.data || []);
+    } catch (error) {
+      setFeedback({ tone: "red", text: error?.message || "Não foi possível carregar as ordens de pagamento." });
+    }
+  }
+
+  async function gerarOrdensPagamento() {
+    setProcessandoOrdens(true);
+    try {
+      const resposta = await api.gerarOrdensPagamentoLogistica(dataFechamento);
+      setOrdensPagamento(resposta.data || []);
+      setFeedback({ tone: "green", text: `${resposta.resumo?.entregadores || 0} ordem(ns) gerada(s) para ${resposta.resumo?.corridas || 0} corrida(s), sem duplicar pagamentos.` });
+    } catch (error) {
+      setFeedback({ tone: "red", text: error?.message || "Não foi possível gerar o fechamento do dia." });
+    } finally {
+      setProcessandoOrdens(false);
+    }
+  }
+
+  async function marcarOrdemPaga(id) {
+    try {
+      const atualizada = await api.pagarOrdemPagamentoLogistica(id);
+      setOrdensPagamento(atuais => atuais.map(item => item.id === id ? atualizada : item));
+      setFeedback({ tone: "green", text: `Ordem ${atualizada.codigo} marcada como paga.` });
+    } catch (error) {
+      setFeedback({ tone: "red", text: error?.message || "Não foi possível confirmar o pagamento." });
+    }
   }
 
   return (
@@ -755,12 +804,43 @@ export default function EntregasMotos({
             </div>
           </Card>
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             <Kpi label="Corridas filtradas" value={String(corridasFiltradas.length)} detail="No período selecionado" icon={Bike} />
-            <Kpi label="Total" value={dinheiro(totalRelatorio)} detail="Valor das corridas" icon={CircleDollarSign} />
-            <Kpi label="Valor médio" value={dinheiro(corridasFiltradas.length ? totalRelatorio / corridasFiltradas.length : 0)} detail="Por entrega" icon={BarChart3} />
-            <Kpi label="Combinações" value={String(consolidadoRelatorio.length)} detail="Bairro, empresa e entregador" icon={FileBarChart2} />
+            <Kpi label="Recebido dos clientes" value={dinheiro(totalRecebidoCliente)} detail="Taxas de entrega cobradas" icon={CircleDollarSign} />
+            <Kpi label="Pago às motos" value={dinheiro(totalRelatorio)} detail="Custo das corridas" icon={Bike} />
+            <Kpi label="Saldo das taxas" value={dinheiro(saldoTaxasEntrega)} detail="Recebido menos pago" icon={BarChart3} />
+            <Kpi label="Custo médio" value={dinheiro(corridasFiltradas.length ? totalRelatorio / corridasFiltradas.length : 0)} detail="Por entrega" icon={FileBarChart2} />
           </div>
+
+          <Card className="overflow-hidden">
+            <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-end sm:justify-between dark:border-slate-700">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Ordens de pagamento das motos</h3>
+                <p className="mt-1 text-xs text-slate-400">Fechamento diário das entregas concluídas, uma ordem por entregador</p>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-xs text-slate-500">Dia do fechamento<input type="date" value={dataFechamento} onChange={evento => setDataFechamento(evento.target.value)} className={inputClass} /></label>
+                <button type="button" onClick={gerarOrdensPagamento} disabled={processandoOrdens || !api.enabled} className={primaryButton}>{processandoOrdens ? "Gerando..." : "Gerar ordens do dia"}</button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-sm">
+                <thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-2.5 font-medium">Ordem</th><th className="px-4 py-2.5 font-medium">Entregador</th><th className="px-4 py-2.5 text-right font-medium">Corridas</th><th className="px-4 py-2.5 text-right font-medium">Recebido clientes</th><th className="px-4 py-2.5 text-right font-medium">Pagar moto</th><th className="px-4 py-2.5 text-right font-medium">Saldo</th><th className="px-4 py-2.5 text-right font-medium">Status</th></tr></thead>
+                <tbody>{ordensPagamento.map(ordem => (
+                  <tr key={ordem.id} className="border-b border-slate-50 dark:border-slate-700/50">
+                    <td className="px-4 py-3 font-mono text-xs">{ordem.codigo}</td>
+                    <td className="px-4 py-3"><strong>{ordem.entregador?.nome}</strong><div className="text-xs text-slate-400">{ordem.entregador?.empresa}</div></td>
+                    <td className="px-4 py-3 text-right">{ordem.quantidadeCorridas}</td>
+                    <td className="px-4 py-3 text-right text-emerald-700">{dinheiro(ordem.totalTaxasCliente)}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{dinheiro(ordem.total)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${ordem.saldoTaxas >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{dinheiro(ordem.saldoTaxas)}</td>
+                    <td className="px-4 py-3 text-right">{ordem.status === "PAGA" ? <Badge tone="green">Paga</Badge> : <button type="button" onClick={() => marcarOrdemPaga(ordem.id)} className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700">Marcar paga</button>}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+              {!ordensPagamento.length && <div className="p-8 text-center text-sm text-slate-400">Selecione o dia e gere o fechamento após concluir as entregas.</div>}
+            </div>
+          </Card>
 
           <Card className="overflow-hidden">
             <div className="border-b border-slate-100 p-4 dark:border-slate-700">
@@ -791,21 +871,23 @@ export default function EntregasMotos({
           </div>
 
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Relatório consolidado</h3>
-              <p className="mt-0.5 text-xs text-slate-400">Bairro, empresa prestadora, entregador, quantidade de corridas e total</p>
+              <p className="mt-0.5 text-xs text-slate-400">Quanto entrou de taxa, quanto foi pago à moto e o saldo por combinação</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-2.5 font-medium">Bairro</th><th className="px-4 py-2.5 font-medium">Empresa prestadora</th><th className="px-4 py-2.5 font-medium">Entregador</th><th className="px-4 py-2.5 text-right font-medium">Corridas</th><th className="px-4 py-2.5 text-right font-medium">Total</th></tr></thead>
+              <table className="w-full min-w-[960px] text-sm">
+                <thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-2.5 font-medium">Bairro</th><th className="px-4 py-2.5 font-medium">Empresa prestadora</th><th className="px-4 py-2.5 font-medium">Entregador</th><th className="px-4 py-2.5 text-right font-medium">Corridas</th><th className="px-4 py-2.5 text-right font-medium">Recebido cliente</th><th className="px-4 py-2.5 text-right font-medium">Pago moto</th><th className="px-4 py-2.5 text-right font-medium">Saldo</th></tr></thead>
                 <tbody>{consolidadoRelatorio.map(item => (
                   <tr key={`${item.bairro}-${item.empresa}-${item.entregador}`} className="border-b border-slate-50 dark:border-slate-700/50">
                     <td className="px-4 py-3 font-medium"><MapPin size={12} className="mr-1 inline text-slate-400" />{item.bairro}</td>
                     <td className="px-4 py-3"><Badge tone="brand">{item.empresa}</Badge></td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.entregador}</td>
                     <td className="px-4 py-3 text-right">{item.corridas}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{dinheiro(item.total)}</td>
+                    <td className="px-4 py-3 text-right text-emerald-700">{dinheiro(item.recebidoCliente)}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{dinheiro(item.pagoMoto)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${item.saldo >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{dinheiro(item.saldo)}</td>
                   </tr>
                 ))}</tbody>
-                {consolidadoRelatorio.length > 0 && <tfoot><tr className="bg-slate-50 font-semibold dark:bg-slate-700/30"><td colSpan={3} className="px-4 py-3">Total filtrado</td><td className="px-4 py-3 text-right">{corridasFiltradas.length}</td><td className="px-4 py-3 text-right text-[#7A1420] dark:text-red-300">{dinheiro(totalRelatorio)}</td></tr></tfoot>}
+                {consolidadoRelatorio.length > 0 && <tfoot><tr className="bg-slate-50 font-semibold dark:bg-slate-700/30"><td colSpan={3} className="px-4 py-3">Total filtrado</td><td className="px-4 py-3 text-right">{corridasFiltradas.length}</td><td className="px-4 py-3 text-right text-emerald-700">{dinheiro(totalRecebidoCliente)}</td><td className="px-4 py-3 text-right">{dinheiro(totalRelatorio)}</td><td className={`px-4 py-3 text-right ${saldoTaxasEntrega >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{dinheiro(saldoTaxasEntrega)}</td></tr></tfoot>}
               </table>
               {!consolidadoRelatorio.length && <div className="p-10 text-center text-sm text-slate-400">Nenhuma corrida encontrada com estes filtros.</div>}
             </div>

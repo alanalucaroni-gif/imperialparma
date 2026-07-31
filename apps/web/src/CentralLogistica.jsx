@@ -362,8 +362,14 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
   const ativos = entregadores.filter(item => item.ativo);
   const bairros = useMemo(() => [...new Set(tarifas.map(item => item.bairro).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "pt-BR")), [tarifas]);
-  const ocupados = new Set(pedidos.filter(item => ["COLETA", "NA_LOJA", "EM_ROTA", "NO_DESTINO", "PROBLEMA", "RETORNANDO"].includes(item.status)).map(item => item.entregador?.id).filter(Boolean));
-  const disponiveis = ativos.filter(item => !ocupados.has(item.id));
+  const ocupacaoPorEntregador = pedidos
+    .filter(item => ["COLETA", "NA_LOJA", "EM_ROTA", "NO_DESTINO", "PROBLEMA", "RETORNANDO"].includes(item.status))
+    .reduce((mapa, item) => {
+      const id = item.entregador?.id;
+      if (id) mapa.set(id, (mapa.get(id) || 0) + 1);
+      return mapa;
+    }, new Map());
+  const disponiveis = ativos.filter(item => (ocupacaoPorEntregador.get(item.id) || 0) < 4);
 
   const pedidosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -446,11 +452,12 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
 
   function rotuloEntregador(entregador, pedido) {
     const custo = calcularCustoDespacho({ pedido, entregador, tarifas });
+    const ocupacao = `${ocupacaoPorEntregador.get(entregador.id) || 0}/4 na rota`;
     if (empresaUsaPrecoTabela(entregador.tipo)) {
       const detalhe = custo.erro ? "sem preço para o bairro" : `tabela ${dinheiro(custo.valor)}`;
-      return `${entregador.nome} · ${entregador.tipo} · ${detalhe}`;
+      return `${entregador.nome} · ${ocupacao} · ${entregador.tipo} · ${detalhe}`;
     }
-    return `${entregador.nome} · ${entregador.tipo} · por km`;
+    return `${entregador.nome} · ${ocupacao} · ${entregador.tipo} · por km`;
   }
 
   async function salvarConfiguracao(evento) {
@@ -582,7 +589,14 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     try {
       const links = await api.gerarLinksPedidoLogistica(pedido.id);
       setLinksPedido(links);
-      setFeedback({ tone: "green", text: `Links seguros de ${pedido.codigoPedido} gerados com sucesso.` });
+      const enviados = [links.envios?.entregador, links.envios?.cliente]
+        .filter(item => ["ENVIADO", "JA_ENVIADO"].includes(item?.status)).length;
+      setFeedback({
+        tone: enviados === 2 ? "green" : "amber",
+        text: enviados === 2
+          ? `Links de ${pedido.codigoPedido} enviados automaticamente ao entregador e ao cliente.`
+          : `Links gerados. ${enviados}/2 enviados automaticamente; confira os avisos abaixo.`,
+      });
     } catch (error) {
       setFeedback({ tone: "red", text: mensagemErro(error, "Não foi possível gerar os links da entrega.") });
     } finally {
@@ -623,7 +637,7 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
       ? `preço de tabela ${entregador.tipo}`
       : "cálculo por quilômetro";
     const atualizado = await alterarStatus(pedido.id, "COLETA", `Pedido atribuído a ${entregador.nome} com ${descricaoCusto}.`, {
-      entregador: { id: entregador.id, nome: entregador.nome, empresa: entregador.tipo },
+      entregador: { id: entregador.id, nome: entregador.nome, empresa: entregador.tipo, telefone: entregador.telefone || undefined },
       atribuidoEm: dataHora(),
       custoEstimado: custo.valor,
       origemValor: custo.origemValor,
@@ -685,13 +699,14 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
         <div className="flex items-center gap-1.5"><Route size={13} /><span>{Number(pedido.distanciaKm).toLocaleString("pt-BR")} km de ida{pedido.origemValor !== "tabela" && Number(pedido.distanciaCobradaKm || pedido.distanciaKm) !== Number(pedido.distanciaKm) ? ` · ${Number(pedido.distanciaCobradaKm).toLocaleString("pt-BR")} km pagos` : ""} · custo {dinheiro(pedido.custoEstimado)} ({origemCusto})</span></div>
         <div className="flex items-center gap-1.5"><Wallet size={13} /><span>Pedido {dinheiro(pedido.valorPedido)} · taxa cliente {dinheiro(pedido.taxaEntregaCliente)} · saldo <strong className={saldoEntrega >= 0 ? "text-emerald-600" : "text-rose-600"}>{dinheiro(saldoEntrega)}</strong></span></div>
         {pedido.entregador && <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300"><Bike size={13} />{pedido.entregador.nome} · {pedido.entregador.empresa}</div>}
+        {pedido.rotaId && <div className="flex items-center gap-1.5 font-medium text-sky-700 dark:text-sky-300"><Route size={13} />Rota #{pedido.ordemNaRota || 1} · capacidade 4 pedidos</div>}
         {pedido.ultimaLocalizacao && <a href={`https://www.google.com/maps?q=${pedido.ultimaLocalizacao.latitude},${pedido.ultimaLocalizacao.longitude}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-sky-600"><Radio size={13} />GPS recebido às {hora(pedido.ultimaLocalizacao.registradoEm)} <ExternalLink size={11} /></a>}
         <div className="flex items-center gap-1.5 text-slate-400"><Clock3 size={13} />Atualizado às {hora(pedido.atualizadoEm)}</div>
         {pedido.ocorrencia && <div className="rounded-lg bg-rose-50 p-2 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"><AlertTriangle size={12} className="mr-1 inline" />{pedido.ocorrencia}</div>}
       </div>
 
       {pedido.status === "EM_PREPARO" && <button type="button" onClick={async () => { const ok = await alterarStatus(pedido.id, "PRONTO", "Pedido pronto para retirada."); if (ok) setFeedback({ tone: "green", text: `${pedido.codigoPedido} está pronto para despacho.` }); }} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Marcar como pronto</button>}
-      {["AGUARDANDO", "PRONTO"].includes(pedido.status) && <div className="mt-3 flex gap-2"><select value={atribuicoes[pedido.id] || ""} onChange={evento => setAtribuicoes(atual => ({ ...atual, [pedido.id]: evento.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"><option value="">Selecionar entregador</option>{ativos.map(item => <option key={item.id} value={item.id} disabled={ocupados.has(item.id)}>{rotuloEntregador(item, pedido)}{ocupados.has(item.id) ? " · ocupado" : ""}</option>)}</select><button type="button" onClick={() => despachar(pedido)} className="rounded-lg bg-[#7A1420] px-3 py-2 text-xs font-medium text-white">Despachar</button></div>}
+      {["AGUARDANDO", "PRONTO"].includes(pedido.status) && <div className="mt-3 flex gap-2"><select value={atribuicoes[pedido.id] || ""} onChange={evento => setAtribuicoes(atual => ({ ...atual, [pedido.id]: evento.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-600 dark:bg-slate-800"><option value="">Selecionar entregador</option>{ativos.map(item => { const lotado = (ocupacaoPorEntregador.get(item.id) || 0) >= 4; return <option key={item.id} value={item.id} disabled={lotado}>{rotuloEntregador(item, pedido)}{lotado ? " · rota completa" : ""}</option>; })}</select><button type="button" onClick={() => despachar(pedido)} className="rounded-lg bg-[#7A1420] px-3 py-2 text-xs font-medium text-white">Despachar</button></div>}
       {["COLETA", "NA_LOJA"].includes(pedido.status) && <div className="mt-3 flex gap-2"><button type="button" onClick={() => confirmarColeta(pedido)} className={cx(primaryButton, "flex-1 py-2 text-xs")}><PackageCheck size={13} className="mr-1 inline" />Confirmar saída</button><button type="button" onClick={() => cancelarPedido(pedido)} className="rounded-lg border border-rose-200 px-3 text-xs text-rose-600"><XCircle size={14} /></button></div>}
       {["EM_ROTA", "NO_DESTINO"].includes(pedido.status) && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => concluirEntrega(pedido)} className={cx(primaryButton, "py-2 text-xs")}><CheckCircle2 size={13} className="mr-1 inline" />Concluir</button><button type="button" onClick={() => registrarProblema(pedido)} className="rounded-lg border border-amber-200 px-3 py-2 text-xs text-amber-700"><AlertTriangle size={13} className="mr-1 inline" />Problema</button></div>}
       {pedido.status === "PROBLEMA" && <button type="button" onClick={async () => { const ok = await alterarStatus(pedido.id, "EM_ROTA", "Entrega retomada após ocorrência.", { ocorrencia: null }); if (ok) setFeedback({ tone: "green", text: `${pedido.codigoPedido} retomou a rota.` }); }} className={cx(primaryButton, "mt-3 w-full py-2 text-xs")}><RefreshCw size={13} className="mr-1 inline" />Retomar entrega</button>}
@@ -721,12 +736,12 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
 
     {linksPedido && <Card className="overflow-hidden border-sky-200 dark:border-sky-500/30">
       <div className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50 p-4 dark:border-sky-500/20 dark:bg-sky-500/10">
-        <div><div className="flex items-center gap-2 font-semibold text-sky-900 dark:text-sky-200"><Link2 size={17} />Links móveis · {linksPedido.codigoPedido}</div><p className="mt-1 text-xs text-sky-700 dark:text-sky-300">Envie o primeiro ao entregador e o segundo ao cliente.</p></div>
+        <div><div className="flex items-center gap-2 font-semibold text-sky-900 dark:text-sky-200"><Link2 size={17} />Links móveis · {linksPedido.codigoPedido}</div><p className="mt-1 text-xs text-sky-700 dark:text-sky-300">O sistema tenta enviar os dois links automaticamente pelo WhatsApp Meta.</p></div>
         <button type="button" onClick={() => setLinksPedido(null)} className="text-sky-500"><XCircle size={18} /></button>
       </div>
       <div className="grid gap-3 p-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Entregador · expira em 48h</p><p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">{linksPedido.entregador}</p></div><div className="flex gap-1"><button type="button" onClick={() => copiarLink(linksPedido.entregadorUrl, "Link do entregador")} className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Copiar link"><Copy size={15} /></button><a href={linksPedido.entregadorUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Abrir painel"><ExternalLink size={15} /></a></div></div><input readOnly value={linksPedido.entregadorUrl} className="mt-3 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500 dark:bg-slate-900/50" /></div>
-        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Cliente · expira em 7 dias</p><p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">Acompanhamento somente leitura</p></div><div className="flex gap-1"><button type="button" onClick={() => copiarLink(linksPedido.rastreioUrl, "Link de rastreio")} className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Copiar link"><Copy size={15} /></button><a href={linksPedido.rastreioUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Abrir rastreio"><ExternalLink size={15} /></a></div></div><input readOnly value={linksPedido.rastreioUrl} className="mt-3 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500 dark:bg-slate-900/50" /><button type="button" onClick={compartilharRastreioWhatsapp} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white">Enviar rastreio pelo WhatsApp</button></div>
+        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Entregador · expira em 48h</p><p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">{linksPedido.entregador}</p><p className={cx("mt-1 text-[11px]", ["ENVIADO", "JA_ENVIADO"].includes(linksPedido.envios?.entregador?.status) ? "text-emerald-600" : "text-amber-600")}>{["ENVIADO", "JA_ENVIADO"].includes(linksPedido.envios?.entregador?.status) ? "WhatsApp enviado automaticamente" : linksPedido.envios?.entregador?.mensagem || "Envio automático pendente"}</p></div><div className="flex gap-1"><button type="button" onClick={() => copiarLink(linksPedido.entregadorUrl, "Link do entregador")} className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Copiar link"><Copy size={15} /></button><a href={linksPedido.entregadorUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Abrir painel"><ExternalLink size={15} /></a></div></div><input readOnly value={linksPedido.entregadorUrl} className="mt-3 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500 dark:bg-slate-900/50" /></div>
+        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase text-slate-400">Cliente · expira em 7 dias</p><p className="mt-1 text-sm font-medium text-slate-800 dark:text-white">Acompanhamento somente leitura</p><p className={cx("mt-1 text-[11px]", ["ENVIADO", "JA_ENVIADO"].includes(linksPedido.envios?.cliente?.status) ? "text-emerald-600" : "text-amber-600")}>{["ENVIADO", "JA_ENVIADO"].includes(linksPedido.envios?.cliente?.status) ? "WhatsApp enviado automaticamente" : linksPedido.envios?.cliente?.mensagem || "Envio automático pendente"}</p></div><div className="flex gap-1"><button type="button" onClick={() => copiarLink(linksPedido.rastreioUrl, "Link de rastreio")} className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Copiar link"><Copy size={15} /></button><a href={linksPedido.rastreioUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-700 dark:text-slate-200" title="Abrir rastreio"><ExternalLink size={15} /></a></div></div><input readOnly value={linksPedido.rastreioUrl} className="mt-3 w-full rounded-lg bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-500 dark:bg-slate-900/50" /><button type="button" onClick={compartilharRastreioWhatsapp} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white">Reenviar manualmente</button></div>
       </div>
     </Card>}
 

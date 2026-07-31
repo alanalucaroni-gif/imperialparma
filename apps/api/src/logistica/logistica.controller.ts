@@ -13,6 +13,9 @@ import {
 import { JwtAuthGuard } from "../auth/jwt-auth.guard.js";
 import {
   AtualizarStatusPedidoLogisticaDto,
+  GerarOrdensPagamentoLogisticaDto,
+  ListarOrdensPagamentoLogisticaDto,
+  PagarOrdemPagamentoLogisticaDto,
   CalcularDistanciaDto,
   CriarOcorrenciaLogisticaDto,
   CriarPedidoLogisticaDto,
@@ -21,6 +24,7 @@ import {
   ResolverOcorrenciaLogisticaDto,
   SalvarConfiguracaoLogisticaDto,
 } from "./logistica.dto.js";
+import { LogisticaPagamentosService } from "./logistica-pagamentos.service.js";
 import { LogisticaOperacaoService } from "./logistica-operacao.service.js";
 import { LogisticaRastreamentoService } from "./logistica-rastreamento.service.js";
 import { LogisticaService } from "./logistica.service.js";
@@ -32,11 +36,34 @@ export class LogisticaController {
     private readonly logistica: LogisticaService,
     private readonly operacao: LogisticaOperacaoService,
     private readonly rastreamento: LogisticaRastreamentoService,
+    private readonly pagamentos: LogisticaPagamentosService,
   ) {}
 
   @Post("calcular-distancia")
   calcularDistancia(@Body() dto: CalcularDistanciaDto) {
     return this.logistica.calcularDistancia(dto);
+  }
+
+  @Post("ordens-pagamento/gerar")
+  gerarOrdensPagamento(
+    @Body() dto: GerarOrdensPagamentoLogisticaDto,
+    @Req() request: { user: { id: string } },
+  ) {
+    return this.pagamentos.gerar(dto, request.user.id);
+  }
+
+  @Get("ordens-pagamento")
+  listarOrdensPagamento(@Query() dto: ListarOrdensPagamentoLogisticaDto) {
+    return this.pagamentos.listar(dto);
+  }
+
+  @Patch("ordens-pagamento/:id/pagar")
+  pagarOrdem(
+    @Param("id") id: string,
+    @Body() _dto: PagarOrdemPagamentoLogisticaDto,
+    @Req() request: { user: { id: string } },
+  ) {
+    return this.pagamentos.pagar(id, request.user.id);
   }
 
   @Get("configuracao")
