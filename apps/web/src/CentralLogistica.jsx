@@ -382,7 +382,6 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     AGUARDANDO: pedidosFiltrados.filter(item => ["AGUARDANDO", "EM_PREPARO", "PRONTO"].includes(item.status)),
     COLETA: pedidosFiltrados.filter(item => ["COLETA", "NA_LOJA"].includes(item.status)),
     EM_ROTA: pedidosFiltrados.filter(item => ["EM_ROTA", "NO_DESTINO", "PROBLEMA", "RETORNANDO"].includes(item.status)),
-    ENTREGUE: pedidosFiltrados.filter(item => ["ENTREGUE", "CANCELADO"].includes(item.status)).slice(0, 20),
   };
 
   const entreguesHoje = pedidos.filter(item => item.status === "ENTREGUE" && hoje(item.entregueEm));
@@ -718,12 +717,11 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
     { chave: "AGUARDANDO", titulo: "Preparo / despacho", icon: Clock3 },
     { chave: "COLETA", titulo: "Coleta", icon: PackageCheck },
     { chave: "EM_ROTA", titulo: "Em rota", icon: Navigation },
-    { chave: "ENTREGUE", titulo: "Finalizados", icon: CheckCircle2 },
   ];
 
   return <div className="flex flex-col gap-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h3 className="text-base font-semibold text-slate-900 dark:text-white">Central de Logística Imperial</h3><p className="text-sm text-slate-500 dark:text-slate-400">Operação própria preparada para receber pedidos do Sischef</p></div>
+      <div><h3 className="text-base font-semibold text-slate-900 dark:text-white">Central de Logística Imperial</h3><p className="text-sm text-slate-500 dark:text-slate-400">Apenas pedidos em operação; finalizados ficam preservados nos relatórios</p></div>
       <div className="flex flex-wrap gap-2">{api.enabled && <Badge tone="green">Dados protegidos no banco</Badge>}<Badge tone="amber">Sischef aguardando API</Badge><button type="button" onClick={() => setAba("novo")} className={primaryButton}><Plus size={15} className="mr-1 inline" />Novo pedido</button></div>
     </div>
 
@@ -754,7 +752,7 @@ export default function CentralLogistica({ entregadores, tarifas = [], onConclui
         <Kpi label="Atenção" value={String(atrasados.length)} detail="Mais de 45 minutos" icon={AlertTriangle} alert={Boolean(atrasados.length)} />
       </div>
       <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60"><Search size={15} className="text-slate-400" /><input value={busca} onChange={evento => setBusca(evento.target.value)} placeholder="Buscar pedido, cliente, bairro ou entregador..." className="w-full bg-transparent text-sm outline-none" /></div>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         {colunas.map(({ chave, titulo, icon: Icon }) => <div key={chave} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-900/40"><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Icon size={14} />{titulo}</div><span className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-500 shadow-sm dark:bg-slate-800">{grupos[chave].length}</span></div><div className="flex flex-col gap-3">{grupos[chave].map(pedido => <PedidoCard key={pedido.id} pedido={pedido} />)}{!grupos[chave].length && <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400 dark:border-slate-700">Nenhum pedido</div>}</div></div>)}
       </div>
     </>}
