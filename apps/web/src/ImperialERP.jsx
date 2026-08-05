@@ -9011,7 +9011,7 @@ function Caixa({ caixas, movimentos, onAbrir, onMovimentar, onFechar }) {
     }
     const resultado = onFechar({ saldoContado: contado, observacao: observacao.trim() });
     setFeedback(resultado);
-    if (resultado.tone === "green") { setSaldoContado(""); setObservacao(""); setTab("historico"); }
+    if (resultado.tone === "green") { setSaldoContado(""); setObservacao(""); setTab("operacao"); }
   }
 
   const tipoLabel = { entrada: "Entrada", saida: "Saída", suprimento: "Suprimento", sangria: "Sangria", troco: "Troco" };
@@ -9027,10 +9027,7 @@ function Caixa({ caixas, movimentos, onAbrir, onMovimentar, onFechar }) {
         <Badge tone={caixaAberto ? "green" : "slate"}><span className="inline-flex items-center gap-1.5"><span className={cx("w-1.5 h-1.5 rounded-full", caixaAberto ? "bg-emerald-500 animate-pulse" : "bg-slate-400")} />{caixaAberto ? `${caixaAberto.id} aberto` : "Nenhum caixa aberto"}</span></Badge>
       </div>
 
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-        <button onClick={() => setTab("operacao")} className={cx("px-4 py-2.5 text-sm font-medium border-b-2", tab === "operacao" ? "border-[#7A1420] text-[#7A1420] dark:text-red-300" : "border-transparent text-slate-400")}>Operação atual</button>
-        <button onClick={() => setTab("historico")} className={cx("px-4 py-2.5 text-sm font-medium border-b-2", tab === "historico" ? "border-[#7A1420] text-[#7A1420] dark:text-red-300" : "border-transparent text-slate-400")}>Histórico de turnos</button>
-      </div>
+      <div className="border-b border-slate-200 pb-2 text-sm text-slate-400 dark:border-slate-700">Esta tela mostra somente o caixa em operação. Fechamentos anteriores permanecem registrados nos relatórios.</div>
 
       {feedback && <div className={cx("rounded-xl border px-4 py-3 text-sm", feedback.tone === "green" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300" : feedback.tone === "red" ? "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300" : "border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-300")}>{feedback.text}</div>}
 
@@ -9069,7 +9066,7 @@ function Caixa({ caixas, movimentos, onAbrir, onMovimentar, onFechar }) {
 
             <Card className="p-5">
               <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Conferência e fechamento</h3>
-              <p className="text-xs text-slate-400 mt-0.5 mb-4">Conte o dinheiro físico; a diferença será registrada no histórico</p>
+              <p className="text-xs text-slate-400 mt-0.5 mb-4">Conte o dinheiro físico; a diferença ficará registrada nos relatórios</p>
               <form onSubmit={fecharCaixa} className="flex flex-col gap-3">
                 <label className="text-xs text-slate-500">Saldo contado (R$)<input inputMode="decimal" value={saldoContado} onChange={e => setSaldoContado(e.target.value)} placeholder="0,00" className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-[#7A1420]" /></label>
                 <div className="grid grid-cols-2 gap-2"><div className="rounded-xl bg-slate-50 dark:bg-slate-700/30 p-3"><div className="text-[10px] uppercase text-slate-400">Esperado</div><div className="font-semibold text-sm mt-0.5">{dinheiro(saldoSistema)}</div></div><div className={cx("rounded-xl p-3", diferencaPreview === 0 ? "bg-emerald-50 dark:bg-emerald-500/10" : "bg-amber-50 dark:bg-amber-500/10")}><div className="text-[10px] uppercase text-slate-400">Diferença</div><div className={cx("font-semibold text-sm mt-0.5", diferencaPreview === 0 ? "text-emerald-600" : "text-amber-600")}>{dinheiro(diferencaPreview)}</div></div></div>
@@ -11643,7 +11640,7 @@ export default function ImperialERP() {
     const horario = new Date().toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     setCaixas(prev => prev.map(c => c.id === caixa.id ? { ...c, status: "fechado", fechadoEm: `hoje ${horario}`, saldoSistema, saldoContado, diferenca, observacao: observacao || (diferenca === 0 ? "Fechamento conferido." : "Diferença sem justificativa informada.") } : c));
     const textoDiferenca = diferenca === 0 ? "sem diferença" : `com diferença de ${diferenca.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`;
-    return { tone: "green", text: `${caixa.id} fechado ${textoDiferenca}. O registro ficou disponível no histórico.` };
+    return { tone: "green", text: `${caixa.id} fechado ${textoDiferenca}. O registro ficou disponível nos relatórios.` };
   }
 
   function handleCadastrarEntregador({ nome, telefone, tipo }) {

@@ -55,16 +55,10 @@ function tarifaDaCorrida(tarifas, empresa, bairro) {
 }
 
 function dataDaCorrida(corrida) {
-  if (corrida.dataLancamento) {
-    const data = new Date(corrida.dataLancamento);
+  const origem = corrida.dataLancamento || corrida.data || corrida.criadoEm || corrida.createdAt;
+  if (origem) {
+    const data = new Date(origem);
     if (!Number.isNaN(data.getTime())) return data;
-  }
-  const texto = normalizar(corrida.lancadaEm);
-  const data = new Date();
-  if (texto.startsWith("ontem")) data.setDate(data.getDate() - 1);
-  if (texto.startsWith("hoje") || texto.startsWith("ontem")) {
-    data.setHours(12, 0, 0, 0);
-    return data;
   }
   return null;
 }
@@ -175,8 +169,8 @@ export default function EntregasMotos({
   const [bairroCadastro, setBairroCadastro] = useState("");
   const [valoresCadastro, setValoresCadastro] = useState({});
 
-  const [filtroInicio, setFiltroInicio] = useState("");
-  const [filtroFim, setFiltroFim] = useState("");
+  const [filtroInicio, setFiltroInicio] = useState(() => dataIsoLocal(new Date()));
+  const [filtroFim, setFiltroFim] = useState(() => dataIsoLocal(new Date()));
   const [filtroBairro, setFiltroBairro] = useState("");
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroEntregador, setFiltroEntregador] = useState("");
@@ -200,7 +194,7 @@ export default function EntregasMotos({
 
   useEffect(() => {
     if (tab === "relatorios" && api.enabled) carregarOrdensPagamento();
-  }, [tab]);
+  }, [tab, filtroInicio, filtroFim]);
 
   const entregadorCadastrado = entregadores.find(item => item.id === entregadorId);
   const empresaCorrida = modoEntregador === "avulso" ? empresaAvulsa : entregadorCadastrado?.tipo;
@@ -209,11 +203,16 @@ export default function EntregasMotos({
   const usaValorLivreEfetivo = !empresaTabelaObrigatoria && (modoEntregador === "avulso" || usarValorLivre);
   const valorAplicado = usaValorLivreEfetivo ? numero(valorLivre) : Number(valorTabela || 0);
   const totalLista = lista.reduce((total, item) => total + Number(item.valor || 0), 0);
-  const totalGeral = corridas.reduce((total, item) => total + Number(item.valor || 0), 0);
+  const hoje = dataIsoLocal(new Date());
+  const corridasHoje = useMemo(
+    () => corridas.filter(corrida => dataIsoLocal(dataDaCorrida(corrida)) === hoje),
+    [corridas, hoje],
+  );
+  const totalGeral = corridasHoje.reduce((total, item) => total + Number(item.valor || 0), 0);
 
   const resumoEntregadores = useMemo(() => {
     const grupos = new Map();
-    corridas.forEach(corrida => {
+    corridasHoje.forEach(corrida => {
       const chave = `${corrida.entregadorId}|${corrida.empresa}`;
       const atual = grupos.get(chave) ?? {
         entregador: corrida.entregador,
@@ -226,7 +225,7 @@ export default function EntregasMotos({
       grupos.set(chave, atual);
     });
     return [...grupos.values()].sort((a, b) => b.total - a.total);
-  }, [corridas]);
+  }, [corridasHoje]);
 
   const tarifasFiltradas = useMemo(() => {
     const busca = normalizar(buscaTarifa);
@@ -476,8 +475,8 @@ export default function EntregasMotos({
   }
 
   function limparFiltros() {
-    setFiltroInicio("");
-    setFiltroFim("");
+    setFiltroInicio(dataIsoLocal(new Date()));
+    setFiltroFim(dataIsoLocal(new Date()));
     setFiltroBairro("");
     setFiltroEmpresa("");
     setFiltroEntregador("");
@@ -576,10 +575,10 @@ export default function EntregasMotos({
       {tab === "corridas" && (
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Kpi label="Corridas" value={String(corridas.length)} detail="Lançamentos registrados" icon={Bike} />
-            <Kpi label="Custo de motos" value={dinheiro(totalGeral)} detail="Total de saídas" icon={CircleDollarSign} />
-            <Kpi label="Entregadores" value={String(resumoEntregadores.length)} detail="Cadastrados e avulsos" icon={Users} />
-            <Kpi label="Custo médio" value={dinheiro(corridas.length ? totalGeral / corridas.length : 0)} detail="Por corrida" icon={BarChart3} />
+            <Kpi label="Corridas do dia" value={String(corridasHoje.length)} detail="Lançamentos de hoje" icon={Bike} />
+            <Kpi label="Custo de motos" value={dinheiro(totalGeral)} detail="Saídas de hoje" icon={CircleDollarSign} />
+            <Kpi label="Entregadores" value={String(resumoEntregadores.length)} detail="Ativos no dia" icon={Users} />
+            <Kpi label="Custo médio" value={dinheiro(corridasHoje.length ? totalGeral / corridasHoje.length : 0)} detail="Por corrida de hoje" icon={BarChart3} />
           </div>
 
           <Card className="p-5">
@@ -686,8 +685,8 @@ export default function EntregasMotos({
               <div className="overflow-x-auto"><table className="w-full min-w-[500px] text-sm"><thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-2.5 font-medium">Entregador</th><th className="px-4 py-2.5 font-medium">Empresa</th><th className="px-4 py-2.5 text-right font-medium">Corridas</th><th className="px-4 py-2.5 text-right font-medium">Total</th></tr></thead><tbody>{resumoEntregadores.map(item => <tr key={`${item.entregador}-${item.empresa}`} className="border-b border-slate-50 dark:border-slate-700/50"><td className="px-4 py-3 font-medium">{item.entregador}</td><td className="px-4 py-3"><Badge tone="brand">{item.empresa}</Badge></td><td className="px-4 py-3 text-right">{item.corridas}</td><td className="px-4 py-3 text-right font-medium">{dinheiro(item.total)}</td></tr>)}</tbody></table></div>
             </Card>
             <Card className="overflow-hidden">
-              <div className="border-b border-slate-100 p-4 dark:border-slate-700"><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Histórico de corridas</h3><p className="mt-0.5 text-xs text-slate-400">Cada destino permanece disponível para os relatórios</p></div>
-              <div className="max-h-[360px] overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-2.5 font-medium">Lote</th><th className="px-4 py-2.5 font-medium">Entregador</th><th className="px-4 py-2.5 font-medium">Bairro</th><th className="px-4 py-2.5 text-right font-medium">Valor</th><th className="px-4 py-2.5 font-medium">Caixa</th></tr></thead><tbody>{corridas.map(item => <tr key={item.id} className="border-b border-slate-50 dark:border-slate-700/50"><td className="px-4 py-3 font-mono text-xs text-slate-400">{item.loteId ?? item.id}</td><td className="px-4 py-3"><div className="font-medium">{item.entregador}</div><div className="text-xs text-slate-400">{item.empresa}</div></td><td className="px-4 py-3 text-slate-500">{item.bairro}</td><td className="px-4 py-3 text-right font-medium">{dinheiro(item.valor)}</td><td className="px-4 py-3"><Badge tone="green">{item.caixaId ?? "Pago"}</Badge></td></tr>)}</tbody></table></div>
+              <div className="border-b border-slate-100 p-4 dark:border-slate-700"><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Corridas de hoje</h3><p className="mt-0.5 text-xs text-slate-400">Períodos anteriores ficam disponíveis em Relatórios</p></div>
+              <div className="max-h-[360px] overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead><tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700"><th className="px-4 py-2.5 font-medium">Lote</th><th className="px-4 py-2.5 font-medium">Entregador</th><th className="px-4 py-2.5 font-medium">Bairro</th><th className="px-4 py-2.5 text-right font-medium">Valor</th><th className="px-4 py-2.5 font-medium">Caixa</th></tr></thead><tbody>{corridasHoje.map(item => <tr key={item.id} className="border-b border-slate-50 dark:border-slate-700/50"><td className="px-4 py-3 font-mono text-xs text-slate-400">{item.loteId ?? item.id}</td><td className="px-4 py-3"><div className="font-medium">{item.entregador}</div><div className="text-xs text-slate-400">{item.empresa}</div></td><td className="px-4 py-3 text-slate-500">{item.bairro}</td><td className="px-4 py-3 text-right font-medium">{dinheiro(item.valor)}</td><td className="px-4 py-3"><Badge tone="green">{item.caixaId ?? "Pago"}</Badge></td></tr>)}</tbody></table></div>
             </Card>
           </div>
         </>
